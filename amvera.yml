@@ -1,14 +1,13 @@
-# Конфигурация для Amvera Cloud
 meta:
-  environment: node
+  environment: docker
   toolchain:
-    name: nodejs
-    version: 20
+    name: docker
 
 build:
   dockerfile: Dockerfile
 
 run:
-  persistentVolumeClaimName: ""
-  containerPort: 3000
-
+  command: ""
+  persistenceMount: ""
+  
+# Переменные окружения добавляются через панель управления Amvera

@@ -59,3 +59,4 @@ CloudPayments поддерживает:
 4. Обновите код `paymentService.ts` для работы с CloudPayments API
 
 
+
