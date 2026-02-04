@@ -59,27 +59,38 @@ export class PaymentWebhookHandler {
 
   /**
    * Обработать уведомление о платеже от платежной системы
+   * Вызывается автоматически при получении webhook от CloudPayments
+   * НЕ зависит от кнопки "Вернуться в магазин"
    */
   async handlePaymentNotification(data: any): Promise<{
     success: boolean;
     message?: string;
   }> {
     try {
+      console.log('💳 ========== ПОЛУЧЕН WEBHOOK ОТ CLOUDPAYMENTS ==========');
+      console.log('📊 Данные платежа:', JSON.stringify(data, null, 2));
+      
       const result = await this.paymentService.processPaymentNotification(data);
+      
+      console.log('🔍 Результат обработки:', JSON.stringify(result, null, 2));
 
       if (result.success && result.userId && result.planId) {
+        console.log(`✅ Платеж успешен! UserId: ${result.userId}, PlanId: ${result.planId}`);
+        
         // Активируем подписку
         const subscription = this.subscriptionService.activateSubscription(
           result.userId,
           result.planId,
           result.paymentId
         );
+        console.log(`📋 Подписка активирована до: ${subscription.endDate}`);
 
         // Получаем информацию о плане
         const plan = this.subscriptionService.getPlanById(result.planId);
         const endDate = subscription.endDate.toLocaleDateString('ru-RU');
 
         // Создаём пригласительную ссылку на закрытый канал
+        console.log(`🔗 Создаю пригласительную ссылку для канала ${this.channelId}...`);
         const inviteLink = await this.createInviteLink(result.userId, plan?.duration || 30);
 
         // Формируем сообщение
@@ -92,12 +103,18 @@ export class PaymentWebhookHandler {
             `${inviteLink}\n\n` +
             `⚠️ Внимание: ссылка одноразовая и действует ${this.inviteLinkExpireHours} часов!\n` +
             `Перейдите по ней прямо сейчас.\n\n`;
+        } else {
+          console.warn('⚠️ Не удалось создать пригласительную ссылку!');
         }
 
         message += `Спасибо за покупку! 🎉`;
 
         // Отправляем уведомление пользователю
+        console.log(`📤 Отправляю сообщение пользователю ${result.userId}...`);
         await this.bot.telegram.sendMessage(result.userId, message);
+        console.log(`✅ Сообщение отправлено пользователю ${result.userId}`);
+        
+        console.log('💳 ========== WEBHOOK ОБРАБОТАН УСПЕШНО ==========');
 
         return {
           success: true,
@@ -105,11 +122,13 @@ export class PaymentWebhookHandler {
         };
       }
 
+      console.log('⚠️ Платеж не прошел проверку или данные неполные');
       return {
         success: false,
         message: 'Платеж не обработан'
       };
     } catch (error) {
+      console.error('❌ ========== ОШИБКА WEBHOOK ==========');
       console.error('Ошибка при обработке webhook платежа:', error);
       return {
         success: false,
