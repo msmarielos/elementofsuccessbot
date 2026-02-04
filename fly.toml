@@ -1,0 +1,20 @@
+# Конфигурация для Fly.io
+# Замените "your-bot-name" на уникальное имя вашего бота
+
+app = "your-bot-name"
+primary_region = "ams"
+
+[build]
+
+[env]
+  NODE_ENV = "production"
+
+# Для Telegram бота в режиме polling порты не нужны
+# Если используете webhook, раскомментируйте:
+# [[services]]
+#   internal_port = 3000
+#   protocol = "tcp"
+#   [[services.ports]]
+#     port = 443
+#     handlers = ["tls", "http"]
+
