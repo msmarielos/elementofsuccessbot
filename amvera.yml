@@ -1,0 +1,14 @@
+# Конфигурация для Amvera Cloud
+meta:
+  environment: node
+  toolchain:
+    name: nodejs
+    version: 20
+
+build:
+  dockerfile: Dockerfile
+
+run:
+  persistentVolumeClaimName: ""
+  containerPort: 3000
+

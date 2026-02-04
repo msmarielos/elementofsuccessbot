@@ -17,3 +17,4 @@ RUN npm run build
 # Запускаем бота
 CMD ["npm", "start"]
 
+
