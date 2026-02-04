@@ -181,30 +181,41 @@ ${plan.features.map(f => `• ${f}`).join('\n')}
       return;
     }
 
-    // Создаем ссылку на оплату
-    const paymentLink = this.paymentService.createPaymentLink(userId, plan, chatId);
+    // Показываем сообщение о создании ссылки
+    await ctx.reply('⏳ Создаю ссылку на оплату...');
 
-    const message = `
+    try {
+      // Создаем ссылку на оплату через CloudPayments API
+      const paymentLink = await this.paymentService.createPaymentLink(userId, plan, chatId);
+
+      const message = `
 💳 Оплата подписки "${plan.name}"
 
 💰 Сумма: ${plan.price}₽
 
 Нажмите на кнопку ниже, чтобы перейти к оплате.
 После успешной оплаты ваша подписка будет активирована автоматически.
-    `.trim();
+      `.trim();
 
-    const keyboard: InlineKeyboardMarkup = {
-      inline_keyboard: [
-        [
-          {
-            text: '💳 Перейти к оплате',
-            url: paymentLink
-          }
-        ],
-      ]
-    };
+      const keyboard: InlineKeyboardMarkup = {
+        inline_keyboard: [
+          [
+            {
+              text: '💳 Перейти к оплате',
+              url: paymentLink
+            }
+          ],
+        ]
+      };
 
-    await ctx.reply(message, { reply_markup: keyboard });
+      await ctx.reply(message, { reply_markup: keyboard });
+    } catch (error) {
+      console.error('Ошибка создания платежной ссылки:', error);
+      await ctx.reply(
+        '❌ Не удалось создать ссылку на оплату.\n\n' +
+        'Пожалуйста, попробуйте позже или обратитесь в поддержку.'
+      );
+    }
   }
 
   // Метод для обработки проверки платежа (можно вызвать через callback или webhook)

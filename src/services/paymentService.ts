@@ -20,35 +20,59 @@ export class PaymentService {
   }
 
   /**
-   * Создать ссылку на оплату через CloudPayments
-   * CloudPayments использует виджет оплаты, который можно открыть через URL
+   * Создать ссылку на оплату через CloudPayments API
+   * Метод /orders/create создает платежную ссылку
    */
-  createPaymentLink(
+  async createPaymentLink(
     userId: number,
     plan: SubscriptionPlan,
     chatId: number
-  ): string {
-    // Формируем параметры для CloudPayments виджета
-    const params = new URLSearchParams({
-      publicId: this.publicId,
-      amount: plan.price.toString(),
-      currency: plan.currency,
-      description: `Подписка ${plan.name}`,
-      accountId: userId.toString(), // ID пользователя в вашей системе
-      invoiceId: `${userId}_${plan.id}_${Date.now()}`, // Уникальный ID платежа
-      data: JSON.stringify({
-        userId: userId.toString(),
-        chatId: chatId.toString(),
-        planId: plan.id,
-      }),
-      // URL для возврата после оплаты
-      successUrl: this.returnUrl,
-      // URL для отмены оплаты
-      failUrl: this.returnUrl,
-    });
+  ): Promise<string> {
+    try {
+      const invoiceId = `${userId}_${plan.id}_${Date.now()}`;
+      
+      // Создаем заказ через CloudPayments API
+      const response = await axios.post(
+        'https://api.cloudpayments.ru/orders/create',
+        {
+          Amount: plan.price,
+          Currency: plan.currency,
+          Description: `Подписка "${plan.name}" - Элемент успеха`,
+          AccountId: userId.toString(),
+          InvoiceId: invoiceId,
+          Email: '', // Опционально
+          JsonData: JSON.stringify({
+            userId: userId.toString(),
+            chatId: chatId.toString(),
+            planId: plan.id,
+          }),
+          // URLs для возврата
+          SuccessRedirectUrl: this.returnUrl,
+          FailRedirectUrl: this.returnUrl,
+        },
+        {
+          auth: {
+            username: this.publicId,
+            password: this.apiSecret,
+          },
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
 
-    // CloudPayments виджет оплаты
-    return `https://widget.cloudpayments.ru/pay?${params.toString()}`;
+      if (response.data && response.data.Success && response.data.Model) {
+        // Возвращаем URL платежной формы
+        console.log('✅ Создана платежная ссылка:', response.data.Model.Url);
+        return response.data.Model.Url;
+      } else {
+        console.error('❌ Ошибка создания заказа CloudPayments:', response.data);
+        throw new Error(response.data?.Message || 'Ошибка создания платежа');
+      }
+    } catch (error: any) {
+      console.error('❌ Ошибка при создании платежной ссылки:', error.response?.data || error.message);
+      throw error;
+    }
   }
 
   /**
