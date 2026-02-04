@@ -18,6 +18,19 @@ export interface UserSubscription {
 }
 
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
+  // ⚠️ ТЕСТОВЫЙ ПЛАН - удалить перед продакшеном!
+  {
+    id: 'test',
+    name: '🧪 Тест (1₽)',
+    description: 'Тестовая подписка',
+    price: 1,
+    currency: 'RUB',
+    duration: 1, // 1 день
+    features: [
+      'Тестовая подписка',
+      'Для проверки оплаты'
+    ]
+  },
   {
     id: '1_month',
     name: '1 месяц',
