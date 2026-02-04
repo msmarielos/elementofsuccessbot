@@ -14,13 +14,28 @@ export class BotCommands {
   ) {}
 
   registerCommands() {
-    // Команда /start
+    // Команда /start с поддержкой deep link параметров
     this.bot.command('start', async (ctx: Context) => {
       const userId = ctx.from?.id;
       if (userId && this.handlers) {
         // Отмечаем, что приветствие показано
         (this.handlers as any).markWelcomeShown(userId);
       }
+
+      // Проверяем deep link параметр (после /start)
+      const message = ctx.message as any;
+      const startPayload = message?.text?.split(' ')[1] || '';
+
+      // Обработка возврата после оплаты
+      if (startPayload === 'payment_success') {
+        await this.handlePaymentReturn(ctx, true);
+        return;
+      }
+      if (startPayload === 'payment_fail') {
+        await this.handlePaymentReturn(ctx, false);
+        return;
+      }
+
       await this.showWelcomeMessage(ctx);
     });
 
@@ -124,6 +139,52 @@ export class BotCommands {
     };
 
     await ctx.reply(welcomeMessage, { reply_markup: keyboard });
+  }
+
+  // Обработка возврата после оплаты
+  private async handlePaymentReturn(ctx: Context, success: boolean) {
+    const userId = ctx.from?.id;
+    if (!userId) return;
+
+    if (success) {
+      // Проверяем статус подписки
+      const hasSubscription = this.subscriptionService.hasActiveSubscription(userId);
+      
+      if (hasSubscription) {
+        const subscriptionInfo = this.subscriptionService.getSubscriptionInfo(userId);
+        await ctx.reply(
+          `🎉 Добро пожаловать!\n\n` +
+          `${subscriptionInfo}\n\n` +
+          `Спасибо за покупку! Теперь у вас есть доступ ко всем материалам.`
+        );
+      } else {
+        // Подписка ещё не активирована (webhook мог не прийти)
+        await ctx.reply(
+          `✅ Оплата получена!\n\n` +
+          `Ваша подписка активируется в течение нескольких минут.\n` +
+          `Если через 5 минут подписка не появится, напишите в поддержку.`
+        );
+      }
+    } else {
+      await ctx.reply(
+        `❌ Оплата не прошла\n\n` +
+        `Попробуйте ещё раз или обратитесь в поддержку, если проблема повторяется.`
+      );
+      
+      // Показываем кнопку для повторной попытки
+      const keyboard: InlineKeyboardMarkup = {
+        inline_keyboard: [
+          [
+            {
+              text: '🔄 Попробовать снова',
+              callback_data: 'show_buy_options'
+            }
+          ]
+        ]
+      };
+      
+      await ctx.reply('Выберите действие:', { reply_markup: keyboard });
+    }
   }
 }
 

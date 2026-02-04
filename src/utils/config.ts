@@ -17,6 +17,14 @@ export const config = {
     webhookUrl: process.env.CLOUDPAYMENTS_WEBHOOK_URL || '',
   },
   
+  // Закрытый канал
+  privateChannel: {
+    // ID закрытого канала (формат: -100XXXXXXXXXX)
+    channelId: process.env.PRIVATE_CHANNEL_ID || '',
+    // Время жизни пригласительной ссылки в часах
+    inviteLinkExpireHours: parseInt(process.env.INVITE_LINK_EXPIRE_HOURS || '24', 10),
+  },
+  
   // Валидация конфигурации
   validate(): void {
     if (!this.botToken) {

@@ -35,25 +35,10 @@ export class BotHandlers {
         return;
       }
 
-      // Покупка подписки
+      // Покупка подписки - сразу формируем ссылку на оплату
       if (data.startsWith('buy_')) {
         const planId = data.replace('buy_', '');
         await this.handlePurchase(ctx, planId);
-        await ctx.answerCbQuery();
-        return;
-      }
-
-      // Подтверждение покупки
-      if (data.startsWith('confirm_buy_')) {
-        const planId = data.replace('confirm_buy_', '');
-        await this.confirmPurchase(ctx, planId);
-        await ctx.answerCbQuery();
-        return;
-      }
-
-      // Отмена покупки
-      if (data === 'cancel_purchase') {
-        await ctx.reply('❌ Покупка отменена.');
         await ctx.answerCbQuery();
         return;
       }
@@ -140,47 +125,6 @@ export class BotHandlers {
       return;
     }
 
-    // Формируем сообщение с информацией о плане
-    const message = `
-💳 Подтверждение покупки
-
-📋 Тариф: ${plan.name}
-💰 Цена: ${plan.price}₽
-📅 Срок действия: ${plan.duration} дней
-
-Включено:
-${plan.features.map(f => `• ${f}`).join('\n')}
-
-После оплаты подписка будет активирована автоматически.
-    `.trim();
-
-    const keyboard: InlineKeyboardMarkup = {
-      inline_keyboard: [
-        [
-          {
-            text: '✅ Подтвердить и перейти к оплате',
-            callback_data: `confirm_buy_${planId}`
-          }
-        ],
-      ]
-    };
-
-    await ctx.reply(message, { reply_markup: keyboard });
-  }
-
-  private async confirmPurchase(ctx: Context, planId: string) {
-    const userId = ctx.from?.id;
-    const chatId = ctx.chat?.id;
-
-    if (!userId || !chatId) return;
-
-    const plan = this.subscriptionService.getPlanById(planId);
-    
-    if (!plan) {
-      await ctx.reply('План подписки не найден.');
-      return;
-    }
-
     // Показываем сообщение о создании ссылки
     await ctx.reply('⏳ Создаю ссылку на оплату...');
 
@@ -191,7 +135,12 @@ ${plan.features.map(f => `• ${f}`).join('\n')}
       const message = `
 💳 Оплата подписки "${plan.name}"
 
+📋 Тариф: ${plan.name}
 💰 Сумма: ${plan.price}₽
+📅 Срок действия: ${plan.duration} дней
+
+Включено:
+${plan.features.map(f => `• ${f}`).join('\n')}
 
 Нажмите на кнопку ниже, чтобы перейти к оплате.
 После успешной оплаты ваша подписка будет активирована автоматически.

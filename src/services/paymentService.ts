@@ -9,13 +9,17 @@ export class PaymentService {
   constructor() {
     this.publicId = process.env.CLOUDPAYMENTS_PUBLIC_ID || '';
     this.apiSecret = process.env.CLOUDPAYMENTS_API_SECRET || '';
-    this.returnUrl = process.env.CLOUDPAYMENTS_RETURN_URL || `https://t.me/${process.env.BOT_USERNAME || 'your_bot'}`;
+    // URL страницы возврата на нашем сервере (она сделает редирект в бота)
+    this.returnUrl = process.env.CLOUDPAYMENTS_RETURN_URL || '';
     
     if (!this.publicId) {
       console.warn('⚠️ CLOUDPAYMENTS_PUBLIC_ID не установлен в переменных окружения');
     }
     if (!this.apiSecret) {
       console.warn('⚠️ CLOUDPAYMENTS_API_SECRET не установлен в переменных окружения');
+    }
+    if (!this.returnUrl) {
+      console.warn('⚠️ CLOUDPAYMENTS_RETURN_URL не установлен - укажите URL вашего сервера/payment/success');
     }
   }
 
