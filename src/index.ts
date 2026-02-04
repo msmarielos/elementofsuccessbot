@@ -4,6 +4,7 @@ import { SubscriptionService } from './services/subscriptionService';
 import { PaymentService } from './services/paymentService';
 import { BotCommands } from './commands/commands';
 import { BotHandlers } from './handlers/handlers';
+import { createWebhookServer } from './server/webhookServer';
 
 dotenv.config();
 
@@ -31,13 +32,17 @@ bot.catch((err, ctx) => {
   ctx.reply('Произошла ошибка. Пожалуйста, попробуйте позже.');
 });
 
+// Создаем webhook сервер для обработки платежей от CloudPayments
+const webhookServer = createWebhookServer(bot, paymentService, subscriptionService);
+const PORT = parseInt(process.env.PORT || '3000', 10);
+
 // Запуск бота
 const startBot = async () => {
   try {
-    console.log('Запуск Telegram бота...');
+    console.log('🚀 Запуск Telegram бота...');
     
     // Установка команд меню бота
-    const commands = [
+    const menuCommands = [
       {
         command: "start",
         description: "Запуск бота"
@@ -48,23 +53,24 @@ const startBot = async () => {
       }
     ];
     
-    await bot.telegram.setMyCommands(commands);
-    console.log('Команды бота установлены');
+    await bot.telegram.setMyCommands(menuCommands);
+    console.log('✅ Команды бота установлены');
     
-    // Для разработки используем polling, для продакшена - webhook
-    if (process.env.WEBHOOK_URL) {
-      await bot.telegram.setWebhook(process.env.WEBHOOK_URL);
-      console.log('Webhook установлен:', process.env.WEBHOOK_URL);
-    } else {
-      await bot.launch();
-      console.log('Бот запущен в режиме polling');
-    }
+    // Запускаем webhook сервер для CloudPayments
+    webhookServer.listen(PORT, () => {
+      console.log(`🌐 Webhook сервер запущен на порту ${PORT}`);
+      console.log(`📡 CloudPayments webhook URL: /webhook/cloudpayments`);
+    });
+    
+    // Запускаем бота в режиме polling (для продакшена)
+    await bot.launch();
+    console.log('✅ Бот запущен в режиме polling');
     
     // Graceful shutdown
     process.once('SIGINT', () => bot.stop('SIGINT'));
     process.once('SIGTERM', () => bot.stop('SIGTERM'));
   } catch (error) {
-    console.error('Ошибка при запуске бота:', error);
+    console.error('❌ Ошибка при запуске бота:', error);
     process.exit(1);
   }
 };
