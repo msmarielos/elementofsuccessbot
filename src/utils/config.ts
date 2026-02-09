@@ -22,7 +22,7 @@ export const config = {
     // ID закрытого канала (формат: -100XXXXXXXXXX)
     channelId: process.env.PRIVATE_CHANNEL_ID || '',
     // Время жизни пригласительной ссылки в часах
-    inviteLinkExpireHours: parseInt(process.env.INVITE_LINK_EXPIRE_HOURS || '24', 10),
+    inviteLinkExpireHours: parseInt(process.env.INVITE_LINK_EXPIRE_HOURS || '12', 10),
   },
   
   // Валидация конфигурации

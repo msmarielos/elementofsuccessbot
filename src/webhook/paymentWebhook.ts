@@ -17,8 +17,8 @@ export class PaymentWebhookHandler {
   ) {
     // ID закрытого канала (начинается с -100 для супергрупп/каналов)
     this.channelId = process.env.PRIVATE_CHANNEL_ID || '';
-    // Время жизни пригласительной ссылки в часах (по умолчанию 24 часа)
-    this.inviteLinkExpireHours = parseInt(process.env.INVITE_LINK_EXPIRE_HOURS || '24', 10);
+    // Время жизни пригласительной ссылки в часах (по умолчанию 12 часов)
+    this.inviteLinkExpireHours = parseInt(process.env.INVITE_LINK_EXPIRE_HOURS || '12', 10);
     
     if (!this.channelId) {
       console.warn('⚠️ PRIVATE_CHANNEL_ID не установлен - пригласительные ссылки не будут создаваться');
@@ -38,8 +38,8 @@ export class PaymentWebhookHandler {
 
     try {
       // Время истечения ссылки (в секундах Unix timestamp)
-      // Даём время на вход: минимум 24 часа или срок подписки, что больше
-      const expireHours = Math.max(this.inviteLinkExpireHours, 24);
+      // Даём время на вход: минимум 12 часов или срок подписки, что больше
+      const expireHours = Math.max(this.inviteLinkExpireHours, 12);
       const expireDate = Math.floor(Date.now() / 1000) + (expireHours * 60 * 60);
 
       // Создаём одноразовую ссылку через Telegram API
