@@ -28,6 +28,9 @@ RUN npm ci --omit=dev
 # Копируем скомпилированный код из builder stage
 COPY --from=builder /app/dist ./dist
 
+# Открываем порт для webhook сервера
+EXPOSE 3000
+
 # Запускаем бота
 CMD ["npm", "start"]
 
