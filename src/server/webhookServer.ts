@@ -20,31 +20,53 @@ export function createWebhookServer(
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
+  // 🔍 Логирование ВСЕХ входящих HTTP-запросов
+  app.use((req: Request, res: Response, next) => {
+    console.log(`\n🌐 ======== HTTP ${req.method} ${req.path} ========`);
+    console.log(`📅 Время: ${new Date().toISOString()}`);
+    console.log(`📡 IP: ${req.ip || req.connection.remoteAddress}`);
+    console.log(`📋 Content-Type: ${req.headers['content-type'] || 'не указан'}`);
+    console.log(`📋 User-Agent: ${req.headers['user-agent'] || 'не указан'}`);
+    if (req.method === 'POST') {
+      console.log(`📦 Body (raw keys): ${Object.keys(req.body || {}).join(', ') || 'пустой'}`);
+      console.log(`📦 Body:`, JSON.stringify(req.body, null, 2));
+    }
+    console.log(`🌐 ================================`);
+    next();
+  });
+
   const webhookHandler = new PaymentWebhookHandler(bot, paymentService, subscriptionService);
 
   // Endpoint для обработки webhook от CloudPayments
   // URL: https://amvera-elementofsuccess-run-elementbot.amvera.io/webhook/cloudpayments
   app.post('/webhook/cloudpayments', async (req: Request, res: Response) => {
     try {
-      console.log('📥 Получен webhook от CloudPayments:', JSON.stringify(req.body, null, 2));
+      console.log('📥 >>>>>> WEBHOOK CLOUDPAYMENTS ПОЛУЧЕН <<<<<<');
+      console.log('📥 Headers:', JSON.stringify(req.headers, null, 2));
+      console.log('📥 Body:', JSON.stringify(req.body, null, 2));
       
       const result = await webhookHandler.handlePaymentNotification(req.body);
 
       // CloudPayments требует ответ в формате { "code": 0 } для успешной обработки
       // code: 0 - успешно, другие коды - ошибка
       if (result.success) {
-        console.log('✅ Платеж успешно обработан');
+        console.log('✅ Платеж успешно обработан, отправляю {code: 0}');
         res.status(200).json({ code: 0 });
       } else {
-        console.log('⚠️ Платеж не обработан:', result.message);
-        // Возвращаем code: 0 даже при неуспехе, чтобы CloudPayments не повторял запрос
-        // Если нужно повторить - верните другой код
+        console.log('⚠️ Платеж не обработан:', result.message, '— отправляю {code: 0}');
         res.status(200).json({ code: 0 });
       }
     } catch (error) {
       console.error('❌ Ошибка при обработке webhook:', error);
-      res.status(200).json({ code: 0 }); // CloudPayments требует 200 ответ
+      res.status(200).json({ code: 0 });
     }
+  });
+
+  // Тестовый POST endpoint — для проверки что POST-запросы вообще доходят
+  app.post('/webhook/test', (req: Request, res: Response) => {
+    console.log('🧪 ТЕСТОВЫЙ WEBHOOK ПОЛУЧЕН!');
+    console.log('🧪 Body:', JSON.stringify(req.body, null, 2));
+    res.status(200).json({ code: 0, message: 'test ok', receivedAt: new Date().toISOString() });
   });
 
   // Health check endpoint
@@ -57,7 +79,9 @@ export function createWebhookServer(
     res.status(200).json({ 
       status: 'running',
       bot: 'element_of_success_bot',
-      webhookUrl: '/webhook/cloudpayments'
+      webhookUrl: '/webhook/cloudpayments',
+      testWebhookUrl: '/webhook/test',
+      timestamp: new Date().toISOString()
     });
   });
 
