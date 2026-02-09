@@ -45,11 +45,11 @@ export class PaymentService {
           AccountId: userId.toString(),
           InvoiceId: invoiceId,
           Email: '', // Опционально
-          JsonData: JSON.stringify({
+          JsonData: {
             userId: userId.toString(),
             chatId: chatId.toString(),
             planId: plan.id,
-          }),
+          },
           // URLs для возврата
           SuccessRedirectUrl: this.returnUrl,
           FailRedirectUrl: this.returnUrl,
@@ -119,7 +119,7 @@ export class PaymentService {
 
   /**
    * Обработать уведомление о платеже (webhook от CloudPayments)
-   * CloudPayments отправляет уведомления в формате JSON
+   * CloudPayments отправляет уведомления в формате CloudPayments (form-urlencoded) или JSON
    */
   async processPaymentNotification(data: any): Promise<{
     success: boolean;
@@ -133,35 +133,62 @@ export class PaymentService {
       
       const transactionId = data.TransactionId;
       const status = data.Status; // Completed, Declined, Cancelled и т.д.
-      const amount = parseFloat(data.Amount);
+      const amount = data.Amount;
       const currency = data.Currency;
+      const invoiceId = data.InvoiceId || '';
+      const accountId = data.AccountId || '';
       
-      // Извлекаем данные из поля Data (JSON строка)
+      console.log(`📋 Webhook поля: TransactionId=${transactionId}, Status=${status}, Amount=${amount}, Currency=${currency}`);
+      console.log(`📋 AccountId=${accountId}, InvoiceId=${invoiceId}`);
+      console.log(`📋 Data (тип: ${typeof data.Data}):`, data.Data);
+      
+      // Извлекаем данные из поля Data (JSON строка или объект)
       let metadata: any = {};
       if (data.Data) {
         try {
-          metadata = typeof data.Data === 'string' ? JSON.parse(data.Data) : data.Data;
+          let parsed = typeof data.Data === 'string' ? JSON.parse(data.Data) : data.Data;
+          // Защита от двойной сериализации — если после парсинга всё ещё строка, парсим ещё раз
+          if (typeof parsed === 'string') {
+            parsed = JSON.parse(parsed);
+          }
+          metadata = parsed;
+          console.log('✅ Data распарсен:', JSON.stringify(metadata));
         } catch (e) {
-          console.error('Ошибка парсинга Data:', e);
+          console.error('⚠️ Ошибка парсинга Data:', e);
+        }
+      } else {
+        console.log('⚠️ Поле Data отсутствует в webhook');
+      }
+
+      // Получаем userId: из Data → AccountId → 0
+      const userId = parseInt(metadata.userId || accountId || '0');
+      
+      // Получаем planId: из Data → из InvoiceId (формат: userId_planId_timestamp) → пустая строка
+      let planId = metadata.planId || '';
+      if (!planId && invoiceId) {
+        // InvoiceId имеет формат: ${userId}_${planId}_${timestamp}
+        // planId может содержать '_' (например: "1_month"), поэтому убираем первый и последний сегменты
+        const parts = invoiceId.split('_');
+        if (parts.length >= 3) {
+          // Убираем первый элемент (userId) и последний (timestamp)
+          planId = parts.slice(1, -1).join('_');
+          console.log(`🔄 planId извлечён из InvoiceId: "${planId}"`);
         }
       }
-
-      const userId = parseInt(metadata.userId || data.AccountId || '0');
-      const planId = metadata.planId || '';
-
-      // Проверяем подпись запроса (если настроена)
-      // CloudPayments может отправлять подпись в заголовке или в теле запроса
-      if (this.apiSecret && data.Hmac) {
-        // TODO: Реализовать проверку HMAC подписи для безопасности
-        // const calculatedHmac = this.calculateHmac(data);
-        // if (calculatedHmac !== data.Hmac) {
-        //   console.error('Неверная подпись webhook');
-        //   return { success: false };
-        // }
-      }
+      
+      console.log(`👤 Итого: userId=${userId}, planId="${planId}"`);
 
       // Проверяем, что платеж успешен
       if (status === 'Completed' || status === 'Authorized') {
+        if (!userId || userId === 0) {
+          console.error('❌ Платеж успешен, но userId не определён!');
+          return { success: false };
+        }
+        if (!planId) {
+          console.error('❌ Платеж успешен, но planId не определён!');
+          return { success: false };
+        }
+        
         return {
           success: true,
           userId,
@@ -170,9 +197,10 @@ export class PaymentService {
         };
       }
 
+      console.log(`⚠️ Статус платежа "${status}" — не Completed/Authorized, пропускаем`);
       return { success: false };
     } catch (error) {
-      console.error('Ошибка при обработке уведомления о платеже CloudPayments:', error);
+      console.error('❌ Ошибка при обработке уведомления о платеже CloudPayments:', error);
       return { success: false };
     }
   }
