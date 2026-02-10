@@ -162,6 +162,25 @@ export function createWebhookServer(
     res.redirect('/payment/success?Success=False');
   });
 
+  // Catch-all для ВСЕХ остальных маршрутов — логируем что именно запрашивается
+  app.use((req: Request, res: Response) => {
+    console.log(`⚠️ 404 — Необработанный запрос: ${req.method} ${req.originalUrl}`);
+    console.log(`⚠️ Headers:`, JSON.stringify(req.headers, null, 2));
+    res.status(200).json({ 
+      status: 'ok',
+      message: `Route ${req.method} ${req.originalUrl} not found, but server is running`,
+      availableRoutes: [
+        'GET /',
+        'GET /health',
+        'POST /webhook/cloudpayments',
+        'POST /webhook/test',
+        'GET /payment/success',
+        'GET /payment/fail'
+      ],
+      timestamp: new Date().toISOString()
+    });
+  });
+
   return app;
 }
 

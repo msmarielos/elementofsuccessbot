@@ -40,7 +40,17 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 const startBot = async () => {
   try {
     console.log('🚀 Запуск Telegram бота...');
+    console.log(`📋 NODE_ENV: ${process.env.NODE_ENV || 'не установлен'}`);
+    console.log(`📋 PORT: ${PORT}`);
+    console.log(`📋 BOT_TOKEN: ${process.env.BOT_TOKEN ? '***установлен***' : '❌ НЕ УСТАНОВЛЕН'}`);
     
+    // СНАЧАЛА запускаем webhook сервер — чтобы Amvera сразу видел что порт открыт
+    webhookServer.listen(PORT, '0.0.0.0', () => {
+      console.log(`🌐 Webhook сервер запущен на 0.0.0.0:${PORT}`);
+      console.log(`📡 CloudPayments webhook URL: /webhook/cloudpayments`);
+      console.log(`❤️ Health check: /health`);
+    });
+
     // Установка команд меню бота
     const menuCommands = [
       {
@@ -56,12 +66,6 @@ const startBot = async () => {
     await bot.telegram.setMyCommands(menuCommands);
     console.log('✅ Команды бота установлены');
     
-    // Запускаем webhook сервер для CloudPayments
-    webhookServer.listen(PORT, () => {
-      console.log(`🌐 Webhook сервер запущен на порту ${PORT}`);
-      console.log(`📡 CloudPayments webhook URL: /webhook/cloudpayments`);
-    });
-    
     // Запускаем бота в режиме polling (для продакшена)
     await bot.launch();
     console.log('✅ Бот запущен в режиме polling');
@@ -71,7 +75,9 @@ const startBot = async () => {
     process.once('SIGTERM', () => bot.stop('SIGTERM'));
   } catch (error) {
     console.error('❌ Ошибка при запуске бота:', error);
-    process.exit(1);
+    // НЕ завершаем процесс, если Express сервер уже запущен
+    // Amvera может перезапустить контейнер, если процесс завершится
+    console.log('⚠️ Express сервер продолжает работать даже при ошибке бота');
   }
 };
 
