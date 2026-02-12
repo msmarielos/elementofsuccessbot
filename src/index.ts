@@ -33,6 +33,7 @@ bot.catch((err, ctx) => {
 
 const webhookServer = createWebhookServer(bot, paymentService, subscriptionService);
 const PORT = parseInt(process.env.PORT || '3000', 10);
+const BOT_LAUNCH_TIMEOUT_MS = parseInt(process.env.BOT_LAUNCH_TIMEOUT_MS || '30000', 10);
 
 const startBot = async () => {
   try {
@@ -58,8 +59,30 @@ const startBot = async () => {
     await bot.telegram.setMyCommands(menuCommands);
     console.log('✅ Команды бота установлены');
 
-    await bot.launch();
-    console.log('✅ Бот запущен в режиме polling');
+    console.log(`⏳ Запускаю polling (timeout ${BOT_LAUNCH_TIMEOUT_MS}ms)...`);
+    const launchPromise = bot.launch();
+
+    const launchResult = await Promise.race<
+      { status: 'launched' } | { status: 'error'; error: unknown } | { status: 'timeout' }
+    >([
+      launchPromise
+        .then(() => ({ status: 'launched' as const }))
+        .catch((error) => ({ status: 'error' as const, error })),
+      new Promise<{ status: 'timeout' }>((resolve) => {
+        setTimeout(() => resolve({ status: 'timeout' }), BOT_LAUNCH_TIMEOUT_MS);
+      }),
+    ]);
+
+    if (launchResult.status === 'launched') {
+      console.log('✅ Бот запущен в режиме polling');
+    } else if (launchResult.status === 'error') {
+      console.error('❌ Ошибка при запуске polling:', launchResult.error);
+    } else {
+      console.warn('⚠️ bot.launch() не завершился в таймаут. Продолжаю запуск и lifecycle job.');
+      launchPromise
+        .then(() => console.log('✅ Бот запущен в режиме polling (с задержкой)'))
+        .catch((error) => console.error('❌ Ошибка polling (после таймаута):', error));
+    }
 
     lifecycleService.start();
 
