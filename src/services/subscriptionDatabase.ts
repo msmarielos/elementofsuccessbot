@@ -33,6 +33,10 @@ export class SubscriptionDatabase {
     this.ensureDbFile();
   }
 
+  getFilePath(): string {
+    return this.dbFilePath;
+  }
+
   loadSubscriptions(): Map<number, UserSubscription> {
     const raw = this.readData();
     const subscriptions = new Map<number, UserSubscription>();

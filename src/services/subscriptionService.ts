@@ -8,6 +8,8 @@ export class SubscriptionService {
   constructor() {
     this.db = new SubscriptionDatabase();
     this.subscriptions = this.db.loadSubscriptions();
+    console.log(`🗄️ Subscriptions DB path: ${this.db.getFilePath()}`);
+    console.log(`🗄️ Loaded subscriptions: ${this.subscriptions.size}`);
   }
 
   /**
