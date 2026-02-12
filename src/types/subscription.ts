@@ -31,7 +31,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     description: 'Тестовая подписка',
     price: 1,
     currency: 'RUB',
-    duration: 1, // 1 день
+    duration: 0, // для smoke-теста моментального истечения
     features: [
       'Тестовая подписка',
       'Для проверки оплаты'
