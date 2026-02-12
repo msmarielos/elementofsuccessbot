@@ -15,6 +15,12 @@ export interface UserSubscription {
   endDate: Date;
   isActive: boolean;
   paymentId?: string;
+  reminder3DaysSent?: boolean;
+  reminder12HoursSent?: boolean;
+  expiryDayNoticeSent?: boolean;
+  expiredMessageSent?: boolean;
+  removedFromPrivateGroup?: boolean;
+  expiredProcessed?: boolean;
 }
 
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [

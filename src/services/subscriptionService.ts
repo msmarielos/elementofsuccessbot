@@ -1,8 +1,14 @@
 import { UserSubscription, SubscriptionPlan, SUBSCRIPTION_PLANS } from '../types/subscription';
+import { SubscriptionDatabase } from './subscriptionDatabase';
 
 export class SubscriptionService {
-  // В реальном приложении здесь должна быть работа с БД
-  private subscriptions: Map<number, UserSubscription> = new Map();
+  private subscriptions: Map<number, UserSubscription>;
+  private db: SubscriptionDatabase;
+
+  constructor() {
+    this.db = new SubscriptionDatabase();
+    this.subscriptions = this.db.loadSubscriptions();
+  }
 
   /**
    * Получить все доступные планы подписки
@@ -27,7 +33,6 @@ export class SubscriptionService {
     if (subscription && subscription.isActive) {
       // Проверяем, не истекла ли подписка
       if (new Date() > subscription.endDate) {
-        subscription.isActive = false;
         return undefined;
       }
       return subscription;
@@ -60,10 +65,17 @@ export class SubscriptionService {
       startDate,
       endDate,
       isActive: true,
-      paymentId
+      paymentId,
+      reminder3DaysSent: false,
+      reminder12HoursSent: false,
+      expiryDayNoticeSent: false,
+      expiredMessageSent: false,
+      removedFromPrivateGroup: false,
+      expiredProcessed: false,
     };
 
     this.subscriptions.set(userId, subscription);
+    this.persist();
     return subscription;
   }
 
@@ -92,7 +104,40 @@ export class SubscriptionService {
            `📅 Действует до: ${endDate}\n` +
            `✅ Статус: Активна`;
   }
+
+  getAllSubscriptions(): UserSubscription[] {
+    return Array.from(this.subscriptions.values());
+  }
+
+  updateSubscription(userId: number, patch: Partial<UserSubscription>): UserSubscription | undefined {
+    const current = this.subscriptions.get(userId);
+    if (!current) return undefined;
+
+    const updated: UserSubscription = {
+      ...current,
+      ...patch,
+      userId: current.userId,
+    };
+
+    this.subscriptions.set(userId, updated);
+    this.persist();
+    return updated;
+  }
+
+  deactivateSubscription(userId: number): void {
+    const current = this.subscriptions.get(userId);
+    if (!current) return;
+    if (!current.isActive) return;
+
+    this.subscriptions.set(userId, { ...current, isActive: false });
+    this.persist();
+  }
+
+  private persist(): void {
+    this.db.saveSubscriptions(this.subscriptions);
+  }
 }
+
 
 
 
