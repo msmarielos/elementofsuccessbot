@@ -9,6 +9,6 @@ build:
 run:
   containerPort: 3000
   command: ""
-  persistenceMount: ""
+  persistenceMount: "/data"
   
 # Переменные окружения добавляются через панель управления Amvera
