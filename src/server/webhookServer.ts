@@ -15,6 +15,7 @@ export function createWebhookServer(
   subscriptionService: SubscriptionService
 ) {
   const app = express();
+  const isProduction = process.env.NODE_ENV === 'production';
   
   // CloudPayments отправляет данные как application/x-www-form-urlencoded или JSON
   app.use(express.json());
@@ -24,10 +25,12 @@ export function createWebhookServer(
   app.use((req: Request, res: Response, next) => {
     console.log(`\n🌐 ======== HTTP ${req.method} ${req.path} ========`);
     console.log(`📅 Время: ${new Date().toISOString()}`);
-    console.log(`📡 IP: ${req.ip || req.connection.remoteAddress}`);
     console.log(`📋 Content-Type: ${req.headers['content-type'] || 'не указан'}`);
-    console.log(`📋 User-Agent: ${req.headers['user-agent'] || 'не указан'}`);
-    if (req.method === 'POST') {
+    if (!isProduction) {
+      console.log(`📡 IP: ${req.ip || req.connection.remoteAddress}`);
+      console.log(`📋 User-Agent: ${req.headers['user-agent'] || 'не указан'}`);
+    }
+    if (!isProduction && req.method === 'POST') {
       console.log(`📦 Body (raw keys): ${Object.keys(req.body || {}).join(', ') || 'пустой'}`);
       console.log(`📦 Body:`, JSON.stringify(req.body, null, 2));
     }
@@ -42,8 +45,13 @@ export function createWebhookServer(
   app.post('/webhook/cloudpayments', async (req: Request, res: Response) => {
     try {
       console.log('📥 >>>>>> WEBHOOK CLOUDPAYMENTS ПОЛУЧЕН <<<<<<');
-      console.log('📥 Headers:', JSON.stringify(req.headers, null, 2));
-      console.log('📥 Body:', JSON.stringify(req.body, null, 2));
+      if (!isProduction) {
+        console.log('📥 Headers:', JSON.stringify(req.headers, null, 2));
+        console.log('📥 Body:', JSON.stringify(req.body, null, 2));
+      } else {
+        const bodyKeys = Object.keys(req.body || {});
+        console.log(`📥 Body keys: ${bodyKeys.join(', ') || 'пустой'}`);
+      }
       
       const result = await webhookHandler.handlePaymentNotification(req.body);
 
@@ -62,13 +70,6 @@ export function createWebhookServer(
     }
   });
 
-  // Тестовый POST endpoint — для проверки что POST-запросы вообще доходят
-  app.post('/webhook/test', (req: Request, res: Response) => {
-    console.log('🧪 ТЕСТОВЫЙ WEBHOOK ПОЛУЧЕН!');
-    console.log('🧪 Body:', JSON.stringify(req.body, null, 2));
-    res.status(200).json({ code: 0, message: 'test ok', receivedAt: new Date().toISOString() });
-  });
-
   // Health check endpoint
   app.get('/health', (req: Request, res: Response) => {
     res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -80,7 +81,6 @@ export function createWebhookServer(
       status: 'running',
       bot: 'element_of_success_bot',
       webhookUrl: '/webhook/cloudpayments',
-      testWebhookUrl: '/webhook/test',
       timestamp: new Date().toISOString()
     });
   });
@@ -165,7 +165,9 @@ export function createWebhookServer(
   // Catch-all для ВСЕХ остальных маршрутов — логируем что именно запрашивается
   app.use((req: Request, res: Response) => {
     console.log(`⚠️ 404 — Необработанный запрос: ${req.method} ${req.originalUrl}`);
-    console.log(`⚠️ Headers:`, JSON.stringify(req.headers, null, 2));
+    if (!isProduction) {
+      console.log(`⚠️ Headers:`, JSON.stringify(req.headers, null, 2));
+    }
     res.status(200).json({ 
       status: 'ok',
       message: `Route ${req.method} ${req.originalUrl} not found, but server is running`,
@@ -173,7 +175,6 @@ export function createWebhookServer(
         'GET /',
         'GET /health',
         'POST /webhook/cloudpayments',
-        'POST /webhook/test',
         'GET /payment/success',
         'GET /payment/fail'
       ],

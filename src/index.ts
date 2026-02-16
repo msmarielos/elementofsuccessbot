@@ -53,7 +53,6 @@ const startBot = async () => {
       { command: 'help', description: 'Помощь и справка' },
       { command: 'plans', description: 'Посмотреть тарифы' },
       { command: 'my_subscription', description: 'Моя подписка' },
-      { command: 'buy', description: 'Оформить подписку' },
     ];
 
     await bot.telegram.setMyCommands(menuCommands);

@@ -9,6 +9,7 @@ import { SubscriptionService } from '../services/subscriptionService';
 export class PaymentWebhookHandler {
   private channelId: string;
   private inviteLinkExpireHours: number;
+  private isProduction: boolean;
 
   constructor(
     private bot: Telegraf,
@@ -19,6 +20,7 @@ export class PaymentWebhookHandler {
     this.channelId = process.env.PRIVATE_CHANNEL_ID || '';
     // Время жизни пригласительной ссылки в часах (по умолчанию 12 часов)
     this.inviteLinkExpireHours = parseInt(process.env.INVITE_LINK_EXPIRE_HOURS || '12', 10);
+    this.isProduction = process.env.NODE_ENV === 'production';
     
     if (!this.channelId) {
       console.warn('⚠️ PRIVATE_CHANNEL_ID не установлен - пригласительные ссылки не будут создаваться');
@@ -49,7 +51,11 @@ export class PaymentWebhookHandler {
         name: `User ${userId} - ${new Date().toISOString()}`, // Имя ссылки для отслеживания
       });
 
-      console.log(`✅ Создана пригласительная ссылка для пользователя ${userId}:`, inviteLink.invite_link);
+      if (this.isProduction) {
+        console.log(`✅ Создана пригласительная ссылка для пользователя ${userId}`);
+      } else {
+        console.log(`✅ Создана пригласительная ссылка для пользователя ${userId}:`, inviteLink.invite_link);
+      }
       return inviteLink.invite_link;
     } catch (error) {
       console.error('❌ Ошибка создания пригласительной ссылки:', error);
@@ -68,11 +74,15 @@ export class PaymentWebhookHandler {
   }> {
     try {
       console.log('💳 ========== ПОЛУЧЕН WEBHOOK ОТ CLOUDPAYMENTS ==========');
-      console.log('📊 Данные платежа:', JSON.stringify(data, null, 2));
+      if (!this.isProduction) {
+        console.log('📊 Данные платежа:', JSON.stringify(data, null, 2));
+      }
       
       const result = await this.paymentService.processPaymentNotification(data);
       
-      console.log('🔍 Результат обработки:', JSON.stringify(result, null, 2));
+      if (!this.isProduction) {
+        console.log('🔍 Результат обработки:', JSON.stringify(result, null, 2));
+      }
 
       if (result.success && result.userId && result.planId) {
         console.log(`✅ Платеж успешен! UserId: ${result.userId}, PlanId: ${result.planId}`);
@@ -90,7 +100,7 @@ export class PaymentWebhookHandler {
         const endDate = subscription.endDate.toLocaleDateString('ru-RU');
 
         // Создаём пригласительную ссылку на закрытый канал
-        console.log(`🔗 Создаю пригласительную ссылку для канала ${this.channelId}...`);
+        console.log('🔗 Создаю пригласительную ссылку для закрытого канала...');
         const inviteLink = await this.createInviteLink(result.userId, plan?.duration || 30);
 
         // Формируем сообщение

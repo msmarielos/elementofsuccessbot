@@ -5,12 +5,14 @@ export class PaymentService {
   private publicId: string;
   private apiSecret: string;
   private returnUrl: string;
+  private isProduction: boolean;
 
   constructor() {
     this.publicId = process.env.CLOUDPAYMENTS_PUBLIC_ID || '';
     this.apiSecret = process.env.CLOUDPAYMENTS_API_SECRET || '';
     // URL страницы возврата на нашем сервере (она сделает редирект в бота)
     this.returnUrl = process.env.CLOUDPAYMENTS_RETURN_URL || '';
+    this.isProduction = process.env.NODE_ENV === 'production';
     
     if (!this.publicId) {
       console.warn('⚠️ CLOUDPAYMENTS_PUBLIC_ID не установлен в переменных окружения');
@@ -74,7 +76,11 @@ export class PaymentService {
         throw new Error(response.data?.Message || 'Ошибка создания платежа');
       }
     } catch (error: any) {
-      console.error('❌ Ошибка при создании платежной ссылки:', error.response?.data || error.message);
+      if (this.isProduction) {
+        console.error('❌ Ошибка при создании платежной ссылки:', error.message);
+      } else {
+        console.error('❌ Ошибка при создании платежной ссылки:', error.response?.data || error.message);
+      }
       throw error;
     }
   }
@@ -140,7 +146,9 @@ export class PaymentService {
       
       console.log(`📋 Webhook поля: TransactionId=${transactionId}, Status=${status}, Amount=${amount}, Currency=${currency}`);
       console.log(`📋 AccountId=${accountId}, InvoiceId=${invoiceId}`);
-      console.log(`📋 Data (тип: ${typeof data.Data}):`, data.Data);
+      if (!this.isProduction) {
+        console.log(`📋 Data (тип: ${typeof data.Data}):`, data.Data);
+      }
       
       // Извлекаем данные из поля Data (JSON строка или объект)
       let metadata: any = {};
@@ -152,7 +160,9 @@ export class PaymentService {
             parsed = JSON.parse(parsed);
           }
           metadata = parsed;
-          console.log('✅ Data распарсен:', JSON.stringify(metadata));
+          if (!this.isProduction) {
+            console.log('✅ Data распарсен:', JSON.stringify(metadata));
+          }
         } catch (e) {
           console.error('⚠️ Ошибка парсинга Data:', e);
         }
