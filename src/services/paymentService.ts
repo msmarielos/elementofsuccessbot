@@ -1,218 +1,216 @@
 import { SubscriptionPlan } from '../types/subscription';
 import axios from 'axios';
+import crypto from 'crypto';
+import { PaymentDatabase, StoredPayment } from './paymentDatabase';
+
+type TBankInitResponse = {
+  Success: boolean;
+  ErrorCode?: string;
+  Message?: string;
+  Details?: string;
+  TerminalKey?: string;
+  Status?: string;
+  PaymentId?: string | number;
+  OrderId?: string;
+  PaymentURL?: string;
+  Amount?: number;
+};
+
+type TBankGetStateResponse = {
+  Success: boolean;
+  ErrorCode?: string;
+  Message?: string;
+  Details?: string;
+  TerminalKey?: string;
+  Status?: string;
+  PaymentId?: string | number;
+  OrderId?: string;
+  Amount?: number;
+};
+
+export type VerifiedPaymentState = {
+  isPaid: boolean;
+  status?: string;
+  amountKopeks?: number;
+};
 
 export class PaymentService {
-  private publicId: string;
-  private apiSecret: string;
-  private returnUrl: string;
+  private terminalKey: string;
+  private password: string;
+  private apiBaseUrl: string;
+  private successUrl: string;
+  private failUrl: string;
   private isProduction: boolean;
+  private db: PaymentDatabase;
 
   constructor() {
-    this.publicId = process.env.CLOUDPAYMENTS_PUBLIC_ID || '';
-    this.apiSecret = process.env.CLOUDPAYMENTS_API_SECRET || '';
-    // URL страницы возврата на нашем сервере (она сделает редирект в бота)
-    this.returnUrl = process.env.CLOUDPAYMENTS_RETURN_URL || '';
+    this.terminalKey = process.env.TBANK_TERMINAL_KEY || '';
+    this.password = process.env.TBANK_PASSWORD || '';
+    this.apiBaseUrl = (process.env.TBANK_API_BASE_URL || 'https://securepay.tinkoff.ru/v2').replace(/\/+$/, '');
     this.isProduction = process.env.NODE_ENV === 'production';
-    
-    if (!this.publicId) {
-      console.warn('⚠️ CLOUDPAYMENTS_PUBLIC_ID не установлен в переменных окружения');
+    this.db = new PaymentDatabase();
+
+    // URLs возврата после оплаты (SuccessURL/FailURL по статье)
+    const publicBaseUrl = (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
+    this.successUrl = process.env.TBANK_SUCCESS_URL || (publicBaseUrl ? `${publicBaseUrl}/payment/success` : '');
+    this.failUrl = process.env.TBANK_FAIL_URL || (publicBaseUrl ? `${publicBaseUrl}/payment/fail` : '');
+
+    if (!this.terminalKey) console.warn('⚠️ TBANK_TERMINAL_KEY не установлен в переменных окружения');
+    if (!this.password) console.warn('⚠️ TBANK_PASSWORD не установлен в переменных окружения');
+    if (!this.successUrl || !this.failUrl) {
+      console.warn('⚠️ Не заданы URLs возврата. Укажите PUBLIC_BASE_URL или TBANK_SUCCESS_URL/TBANK_FAIL_URL');
     }
-    if (!this.apiSecret) {
-      console.warn('⚠️ CLOUDPAYMENTS_API_SECRET не установлен в переменных окружения');
-    }
-    if (!this.returnUrl) {
-      console.warn('⚠️ CLOUDPAYMENTS_RETURN_URL не установлен - укажите URL вашего сервера/payment/success');
-    }
+
+    console.log(`🗄️ Payments DB path: ${this.db.getFilePath()}`);
   }
 
   /**
-   * Создать ссылку на оплату через CloudPayments API
-   * Метод /orders/create создает платежную ссылку
+   * Инициировать платеж в T‑Bank и получить PaymentURL
+   * По сценарию из статьи: Init → PaymentURL → открыть ссылку в WebView/браузере.
    */
   async createPaymentLink(
     userId: number,
     plan: SubscriptionPlan,
     chatId: number
-  ): Promise<string> {
-    try {
-      const invoiceId = `${userId}_${plan.id}_${Date.now()}`;
-      
-      // Создаем заказ через CloudPayments API
-      const response = await axios.post(
-        'https://api.cloudpayments.ru/orders/create',
-        {
-          Amount: plan.price,
-          Currency: plan.currency,
-          Description: `Подписка "${plan.name}" - Элемент успеха`,
-          AccountId: userId.toString(),
-          InvoiceId: invoiceId,
-          Email: '', // Опционально
-          JsonData: {
-            userId: userId.toString(),
-            chatId: chatId.toString(),
-            planId: plan.id,
-          },
-          // URLs для возврата
-          SuccessRedirectUrl: this.returnUrl,
-          FailRedirectUrl: this.returnUrl,
-        },
-        {
-          auth: {
-            username: this.publicId,
-            password: this.apiSecret,
-          },
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+  ): Promise<{ paymentUrl: string; paymentId: string; orderId: string }> {
+    if (!this.terminalKey || !this.password) {
+      throw new Error('TBANK_TERMINAL_KEY/TBANK_PASSWORD должны быть установлены');
+    }
+    if (!this.successUrl || !this.failUrl) {
+      throw new Error('PUBLIC_BASE_URL или TBANK_SUCCESS_URL/TBANK_FAIL_URL должны быть установлены');
+    }
 
-      if (response.data && response.data.Success && response.data.Model) {
-        // Возвращаем URL платежной формы
-        console.log('✅ Создана платежная ссылка:', response.data.Model.Url);
-        return response.data.Model.Url;
-      } else {
-        console.error('❌ Ошибка создания заказа CloudPayments:', response.data);
-        throw new Error(response.data?.Message || 'Ошибка создания платежа');
+    const orderId = `${userId}_${plan.id}_${Date.now()}`;
+    const amountKopeks = Math.round(plan.price * 100);
+
+    const body: Record<string, any> = {
+      TerminalKey: this.terminalKey,
+      Amount: amountKopeks,
+      OrderId: orderId,
+      Description: `Подписка "${plan.name}" - Элемент успеха`,
+      SuccessURL: this.successUrl,
+      FailURL: this.failUrl,
+    };
+
+    const token = this.createToken({ ...body, Password: this.password });
+    const requestBody = { ...body, Token: token };
+
+    try {
+      const response = await axios.post<TBankInitResponse>(`${this.apiBaseUrl}/Init`, requestBody, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 15000,
+      });
+
+      const data = response.data;
+      if (data?.Success && data.PaymentURL && data.PaymentId !== undefined) {
+        const paymentId = String(data.PaymentId);
+
+        const record: StoredPayment = {
+          paymentId,
+          orderId,
+          userId,
+          chatId,
+          planId: plan.id,
+          amountKopeks,
+          currency: plan.currency,
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          subscriptionActivated: false,
+        };
+        this.db.upsert(record);
+
+        console.log('✅ Создана платежная ссылка T‑Bank:', data.PaymentURL, 'PaymentId=', paymentId);
+        return { paymentUrl: data.PaymentURL, paymentId, orderId };
       }
+
+      console.error('❌ Ошибка Init T‑Bank:', data);
+      throw new Error(data?.Message || data?.Details || 'Ошибка инициирования платежа T‑Bank');
     } catch (error: any) {
       if (this.isProduction) {
-        console.error('❌ Ошибка при создании платежной ссылки:', error.message);
+        console.error('❌ Ошибка Init T‑Bank:', error.message);
       } else {
-        console.error('❌ Ошибка при создании платежной ссылки:', error.response?.data || error.message);
+        console.error('❌ Ошибка Init T‑Bank:', error.response?.data || error.message);
       }
       throw error;
     }
   }
 
+  getPaymentRecord(paymentId: string): StoredPayment | undefined {
+    return this.db.get(paymentId);
+  }
+
+  markPaymentActivated(paymentId: string): void {
+    this.db.markActivated(paymentId);
+  }
+
   /**
-   * Верифицировать платеж через CloudPayments API
+   * Получить статус платежа (GetState).
+   * По статье: после успешного/неуспешного сценария нужно дополнительно вызвать метод получения статуса.
    */
-  async verifyPayment(paymentId: string, userId: number, planId: string): Promise<boolean> {
-    if (!this.apiSecret) {
-      console.error('CLOUDPAYMENTS_API_SECRET не установлен');
-      return false;
+  async getPaymentState(paymentId: string): Promise<TBankGetStateResponse> {
+    if (!this.terminalKey || !this.password) {
+      throw new Error('TBANK_TERMINAL_KEY/TBANK_PASSWORD должны быть установлены');
     }
 
-    try {
-      // Проверка платежа через CloudPayments API
-      const response = await axios.get(
-        `https://api.cloudpayments.ru/payments/get?TransactionId=${paymentId}`,
-        {
-          auth: {
-            username: this.publicId,
-            password: this.apiSecret,
-          },
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+    const body: Record<string, any> = {
+      TerminalKey: this.terminalKey,
+      PaymentId: paymentId,
+    };
+    const token = this.createToken({ ...body, Password: this.password });
+    const requestBody = { ...body, Token: token };
 
-      // Проверяем статус платежа
-      if (response.data && response.data.Success) {
-        const payment = response.data.Model;
-        // Проверяем, что платеж успешен и сумма соответствует
-        return payment.Status === 'Completed' || payment.Status === 'Authorized';
+    const response = await axios.post<TBankGetStateResponse>(`${this.apiBaseUrl}/GetState`, requestBody, {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 15000,
+    });
+
+    return response.data;
+  }
+
+  async verifyPaymentByRecord(record: StoredPayment): Promise<VerifiedPaymentState> {
+    try {
+      const state = await this.getPaymentState(record.paymentId);
+
+      if (!state?.Success) {
+        return { isPaid: false, status: state?.Status, amountKopeks: state?.Amount };
       }
 
-      return false;
+      const status = state.Status || '';
+      const amount = typeof state.Amount === 'number' ? state.Amount : undefined;
+
+      // Одностадийный: CONFIRMED
+      // Двухстадийный: AUTHORIZED (после оплаты) → CONFIRMED (после Confirm)
+      const paidByStatus = status === 'CONFIRMED' || status === 'AUTHORIZED';
+      const amountMatches = amount === undefined ? true : amount === record.amountKopeks;
+
+      if (paidByStatus && amountMatches) {
+        this.db.updateStatus(record.paymentId, 'confirmed');
+        return { isPaid: true, status, amountKopeks: amount };
+      }
+
+      return { isPaid: false, status, amountKopeks: amount };
     } catch (error) {
-      console.error('Ошибка при проверке платежа CloudPayments:', error);
-      return false;
+      console.error('❌ Ошибка verifyPaymentByRecord:', error);
+      return { isPaid: false };
     }
   }
 
   /**
-   * Обработать уведомление о платеже (webhook от CloudPayments)
-   * CloudPayments отправляет уведомления в формате CloudPayments (form-urlencoded) или JSON
+   * Формирование Token для запросов T‑Bank (подпись).
+   * Реализовано по классическому правилу e-acquiring: сортировка ключей и SHA-256 по конкатенации значений + Password.
    */
-  async processPaymentNotification(data: any): Promise<{
-    success: boolean;
-    userId?: number;
-    planId?: string;
-    paymentId?: string;
-  }> {
-    try {
-      // Структура данных от CloudPayments webhook
-      // Документация: https://cloudpayments.ru/Docs/Notifications
-      
-      const transactionId = data.TransactionId;
-      const status = data.Status; // Completed, Declined, Cancelled и т.д.
-      const amount = data.Amount;
-      const currency = data.Currency;
-      const invoiceId = data.InvoiceId || '';
-      const accountId = data.AccountId || '';
-      
-      console.log(`📋 Webhook поля: TransactionId=${transactionId}, Status=${status}, Amount=${amount}, Currency=${currency}`);
-      console.log(`📋 AccountId=${accountId}, InvoiceId=${invoiceId}`);
-      if (!this.isProduction) {
-        console.log(`📋 Data (тип: ${typeof data.Data}):`, data.Data);
-      }
-      
-      // Извлекаем данные из поля Data (JSON строка или объект)
-      let metadata: any = {};
-      if (data.Data) {
-        try {
-          let parsed = typeof data.Data === 'string' ? JSON.parse(data.Data) : data.Data;
-          // Защита от двойной сериализации — если после парсинга всё ещё строка, парсим ещё раз
-          if (typeof parsed === 'string') {
-            parsed = JSON.parse(parsed);
-          }
-          metadata = parsed;
-          if (!this.isProduction) {
-            console.log('✅ Data распарсен:', JSON.stringify(metadata));
-          }
-        } catch (e) {
-          console.error('⚠️ Ошибка парсинга Data:', e);
-        }
-      } else {
-        console.log('⚠️ Поле Data отсутствует в webhook');
-      }
+  private createToken(fields: Record<string, any>): string {
+    const normalized: Record<string, string> = {};
+    Object.keys(fields).forEach((key) => {
+      if (fields[key] === undefined || fields[key] === null) return;
+      // В Token-схеме T‑Bank обычно участвуют строковые значения. Объекты/массивы не используем.
+      normalized[key] = String(fields[key]);
+    });
 
-      // Получаем userId: из Data → AccountId → 0
-      const userId = parseInt(metadata.userId || accountId || '0');
-      
-      // Получаем planId: из Data → из InvoiceId (формат: userId_planId_timestamp) → пустая строка
-      let planId = metadata.planId || '';
-      if (!planId && invoiceId) {
-        // InvoiceId имеет формат: ${userId}_${planId}_${timestamp}
-        // planId может содержать '_' (например: "1_month"), поэтому убираем первый и последний сегменты
-        const parts = invoiceId.split('_');
-        if (parts.length >= 3) {
-          // Убираем первый элемент (userId) и последний (timestamp)
-          planId = parts.slice(1, -1).join('_');
-          console.log(`🔄 planId извлечён из InvoiceId: "${planId}"`);
-        }
-      }
-      
-      console.log(`👤 Итого: userId=${userId}, planId="${planId}"`);
-
-      // Проверяем, что платеж успешен
-      if (status === 'Completed' || status === 'Authorized') {
-        if (!userId || userId === 0) {
-          console.error('❌ Платеж успешен, но userId не определён!');
-          return { success: false };
-        }
-        if (!planId) {
-          console.error('❌ Платеж успешен, но planId не определён!');
-          return { success: false };
-        }
-        
-        return {
-          success: true,
-          userId,
-          planId,
-          paymentId: transactionId?.toString(),
-        };
-      }
-
-      console.log(`⚠️ Статус платежа "${status}" — не Completed/Authorized, пропускаем`);
-      return { success: false };
-    } catch (error) {
-      console.error('❌ Ошибка при обработке уведомления о платеже CloudPayments:', error);
-      return { success: false };
-    }
+    const keys = Object.keys(normalized).sort();
+    const concatenated = keys.map((k) => normalized[k]).join('');
+    return crypto.createHash('sha256').update(concatenated).digest('hex');
   }
 }
 

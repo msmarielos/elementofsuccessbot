@@ -2,15 +2,19 @@ import { Telegraf, Context } from 'telegraf';
 import { SubscriptionService } from '../services/subscriptionService';
 import { PaymentService } from '../services/paymentService';
 import { InlineKeyboardMarkup } from 'telegraf/types';
+import { PaymentCompletionService } from '../services/paymentCompletionService';
 
 export class BotHandlers {
   private welcomeShown: Set<number> = new Set();
+  private paymentCompletion: PaymentCompletionService;
 
   constructor(
     private bot: Telegraf,
     private subscriptionService: SubscriptionService,
     private paymentService: PaymentService
-  ) {}
+  ) {
+    this.paymentCompletion = new PaymentCompletionService(bot, paymentService, subscriptionService);
+  }
 
   // Метод для отметки, что приветствие показано (используется из BotCommands)
   markWelcomeShown(userId: number) {
@@ -45,8 +49,18 @@ export class BotHandlers {
 
       // Проверка платежа
       if (data.startsWith('check_payment_')) {
-        const planId = data.replace('check_payment_', '');
-        await this.checkPayment(ctx, planId);
+        const tail = data.replace('check_payment_', '');
+        const parts = tail.split('_');
+        // Новый формат: check_payment_{planId}_{paymentId}
+        if (parts.length >= 2) {
+          const paymentId = parts[parts.length - 1];
+          const planId = parts.slice(0, -1).join('_');
+          await this.checkPayment(ctx, planId, paymentId);
+        } else {
+          // legacy: check_payment_{planId}
+          const planId = tail;
+          await this.checkPayment(ctx, planId);
+        }
         await ctx.answerCbQuery();
         return;
       }
@@ -129,8 +143,8 @@ export class BotHandlers {
     await ctx.reply('⏳ Создаю ссылку на оплату...');
 
     try {
-      // Создаем ссылку на оплату через CloudPayments API
-      const paymentLink = await this.paymentService.createPaymentLink(userId, plan, chatId);
+      // Инициируем платеж в T‑Bank и получаем PaymentURL
+      const { paymentUrl, paymentId } = await this.paymentService.createPaymentLink(userId, plan, chatId);
 
       const message = `
 💳 Оплата подписки "${plan.name}"
@@ -151,9 +165,15 @@ ${plan.features.map(f => `• ${f}`).join('\n')}
           [
             {
               text: '💳 Перейти к оплате',
-              url: paymentLink
+              url: paymentUrl
             }
           ],
+          [
+            {
+              text: '✅ Проверить оплату',
+              callback_data: `check_payment_${plan.id}_${paymentId}`,
+            },
+          ]
         ]
       };
 
@@ -178,29 +198,12 @@ ${plan.features.map(f => `• ${f}`).join('\n')}
       return;
     }
 
-    // В реальном приложении здесь должна быть проверка платежа через API
-    const isPaymentValid = await this.paymentService.verifyPayment(
-      paymentId || `payment_${userId}_${Date.now()}`,
-      userId,
-      planId
-    );
-
-    if (isPaymentValid) {
-      // Активируем подписку
-      this.subscriptionService.activateSubscription(userId, planId, paymentId);
-      
-      const subscriptionInfo = this.subscriptionService.getSubscriptionInfo(userId);
-      await ctx.reply(
-        `✅ Платеж успешно обработан!\n\n${subscriptionInfo}\n\n` +
-        `Спасибо за покупку! Ваша подписка активирована.`
-      );
-    } else {
-      await ctx.reply(
-        '❌ Платеж не найден или еще не обработан.\n\n' +
-        'Если вы уже оплатили, подождите несколько минут и попробуйте снова.\n' +
-        'Если проблема сохраняется, обратитесь в поддержку.'
-      );
+    if (!paymentId) {
+      await ctx.reply('⚠️ Не знаю PaymentId для проверки. Создайте новую ссылку на оплату.');
+      return;
     }
+
+    await this.paymentCompletion.replyCheckResultToChat(ctx.chat!.id, paymentId);
   }
 
   private async handleStartCommand(ctx: Context) {

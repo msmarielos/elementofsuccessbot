@@ -119,6 +119,13 @@ export class SubscriptionLifecycleService {
     }
 
     try {
+      // Не пытаемся удалить владельца чата (creator)
+      const chatMember = await this.bot.telegram.getChatMember(this.channelId, userId).catch(() => null as any);
+      if (chatMember && (chatMember as any).status === 'creator') {
+        console.log(`ℹ️ Пользователь ${userId} является владельцем чата (chat owner), удаление пропущено`);
+        return true;
+      }
+
       const untilDate = Math.floor(Date.now() / 1000) + 60;
       await this.bot.telegram.banChatMember(this.channelId, userId, untilDate);
       await this.bot.telegram.unbanChatMember(this.channelId, userId, { only_if_banned: true });

@@ -25,8 +25,11 @@
 
 ```
 BOT_TOKEN=ваш_токен_бота
-CLOUDPAYMENTS_PUBLIC_ID=ваш_public_id
-CLOUDPAYMENTS_API_SECRET=ваш_api_secret
+TBANK_TERMINAL_KEY=ваш_terminal_key
+TBANK_PASSWORD=ваш_password
+PUBLIC_BASE_URL=https://your-domain.com
+BOT_USERNAME=your_bot_username
+PRIVATE_CHANNEL_ID=-100XXXXXXXXXX
 ```
 
 6. Railway автоматически задеплоит бота!
@@ -71,8 +74,11 @@ fly launch
 
 # Добавление секретов (переменных окружения)
 fly secrets set BOT_TOKEN=ваш_токен
-fly secrets set CLOUDPAYMENTS_PUBLIC_ID=ваш_id
-fly secrets set CLOUDPAYMENTS_API_SECRET=ваш_secret
+fly secrets set TBANK_TERMINAL_KEY=ваш_terminal_key
+fly secrets set TBANK_PASSWORD=ваш_password
+fly secrets set PUBLIC_BASE_URL=https://your-domain.com
+fly secrets set BOT_USERNAME=your_bot_username
+fly secrets set PRIVATE_CHANNEL_ID=-100XXXXXXXXXX
 
 # Деплой
 fly deploy
@@ -118,8 +124,11 @@ npm run build
 # Создание файла .env
 cat > .env << EOF
 BOT_TOKEN=ваш_токен
-CLOUDPAYMENTS_PUBLIC_ID=ваш_id
-CLOUDPAYMENTS_API_SECRET=ваш_secret
+TBANK_TERMINAL_KEY=ваш_terminal_key
+TBANK_PASSWORD=ваш_password
+PUBLIC_BASE_URL=https://your-domain.com
+BOT_USERNAME=your_bot_username
+PRIVATE_CHANNEL_ID=-100XXXXXXXXXX
 EOF
 
 # Запуск через PM2

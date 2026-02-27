@@ -44,7 +44,7 @@ const startBot = async () => {
 
     webhookServer.listen(PORT, '0.0.0.0', () => {
       console.log(`🌐 Webhook сервер запущен на 0.0.0.0:${PORT}`);
-      console.log('📡 CloudPayments webhook URL: /webhook/cloudpayments');
+      console.log('💳 Payment return URLs: /payment/success , /payment/fail');
       console.log('❤️ Health check: /health');
     });
 

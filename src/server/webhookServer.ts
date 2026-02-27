@@ -2,11 +2,12 @@ import express, { Request, Response } from 'express';
 import { Telegraf } from 'telegraf';
 import { PaymentService } from '../services/paymentService';
 import { SubscriptionService } from '../services/subscriptionService';
-import { PaymentWebhookHandler } from '../webhook/paymentWebhook';
+import { PaymentCompletionService } from '../services/paymentCompletionService';
 
 /**
- * Сервер для обработки webhook от CloudPayments
- * CloudPayments отправляет уведомления о платежах на этот endpoint
+ * HTTP сервер для возвратов после оплаты (SuccessURL/FailURL) и healthcheck.
+ * По сценарию T‑Bank WebView: после оплаты пользователь попадает на SuccessURL/FailURL,
+ * а мы на сервере дополнительно проверяем платеж через GetState.
  */
 
 export function createWebhookServer(
@@ -17,7 +18,6 @@ export function createWebhookServer(
   const app = express();
   const isProduction = process.env.NODE_ENV === 'production';
   
-  // CloudPayments отправляет данные как application/x-www-form-urlencoded или JSON
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
@@ -38,37 +38,7 @@ export function createWebhookServer(
     next();
   });
 
-  const webhookHandler = new PaymentWebhookHandler(bot, paymentService, subscriptionService);
-
-  // Endpoint для обработки webhook от CloudPayments
-  // URL: https://amvera-elementofsuccess-run-elementbot.amvera.io/webhook/cloudpayments
-  app.post('/webhook/cloudpayments', async (req: Request, res: Response) => {
-    try {
-      console.log('📥 >>>>>> WEBHOOK CLOUDPAYMENTS ПОЛУЧЕН <<<<<<');
-      if (!isProduction) {
-        console.log('📥 Headers:', JSON.stringify(req.headers, null, 2));
-        console.log('📥 Body:', JSON.stringify(req.body, null, 2));
-      } else {
-        const bodyKeys = Object.keys(req.body || {});
-        console.log(`📥 Body keys: ${bodyKeys.join(', ') || 'пустой'}`);
-      }
-      
-      const result = await webhookHandler.handlePaymentNotification(req.body);
-
-      // CloudPayments требует ответ в формате { "code": 0 } для успешной обработки
-      // code: 0 - успешно, другие коды - ошибка
-      if (result.success) {
-        console.log('✅ Платеж успешно обработан, отправляю {code: 0}');
-        res.status(200).json({ code: 0 });
-      } else {
-        console.log('⚠️ Платеж не обработан:', result.message, '— отправляю {code: 0}');
-        res.status(200).json({ code: 0 });
-      }
-    } catch (error) {
-      console.error('❌ Ошибка при обработке webhook:', error);
-      res.status(200).json({ code: 0 });
-    }
-  });
+  const completionService = new PaymentCompletionService(bot, paymentService, subscriptionService);
 
   // Health check endpoint
   app.get('/health', (req: Request, res: Response) => {
@@ -80,17 +50,37 @@ export function createWebhookServer(
     res.status(200).json({ 
       status: 'running',
       bot: 'element_of_success_bot',
-      webhookUrl: '/webhook/cloudpayments',
+      paymentReturn: {
+        successUrlPath: '/payment/success',
+        failUrlPath: '/payment/fail',
+      },
       timestamp: new Date().toISOString()
     });
   });
 
-  // Страница возврата после оплаты CloudPayments
-  // CloudPayments добавляет параметры к URL, которые Telegram не понимает
-  // Поэтому делаем редирект на правильный deep link
+  // Страница возврата после оплаты (SuccessURL / FailURL)
+  // По статье: после редиректа дополнительно проверяем статус платежа через GetState и сверяем Amount.
   app.get('/payment/success', (req: Request, res: Response) => {
     const botUsername = process.env.BOT_USERNAME || 'element_of_success_bot';
-    const success = req.query.Success === 'True';
+
+    const paymentIdRaw =
+      (req.query.PaymentId as string | undefined) ||
+      (req.query.paymentId as string | undefined) ||
+      (req.query.PAYMENTID as string | undefined) ||
+      (req.query.paymentid as string | undefined);
+
+    const paymentId = paymentIdRaw ? String(paymentIdRaw) : '';
+
+    let success = false;
+    if (paymentId) {
+      // Пытаемся завершить платеж (идемпотентно)
+      void completionService.completeIfPaid(paymentId).then((result) => {
+        if (!isProduction) {
+          console.log('🔎 completeIfPaid result:', result);
+        }
+      });
+      success = true; // страница "успешно" (фактическая проверка происходит на сервере)
+    }
     
     // HTML страница с автоматическим редиректом и кнопкой
     const html = `
@@ -99,7 +89,7 @@ export function createWebhookServer(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${success ? '✅ Оплата успешна!' : '❌ Ошибка оплаты'}</title>
+  <title>${success ? '✅ Оплата обрабатывается' : '❌ Ошибка оплаты'}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -142,9 +132,9 @@ export function createWebhookServer(
 <body>
   <div class="card">
     <div class="icon">${success ? '✅' : '❌'}</div>
-    <h1>${success ? 'Оплата прошла успешно!' : 'Ошибка оплаты'}</h1>
-    <p>${success 
-      ? 'Ваша подписка активирована. Нажмите кнопку ниже, чтобы вернуться в бота.' 
+    <h1>${success ? 'Платеж обрабатывается' : 'Ошибка оплаты'}</h1>
+    <p>${success
+      ? 'Мы проверяем статус платежа и активируем подписку. Нажмите кнопку ниже, чтобы вернуться в бота и при необходимости проверить оплату.'
       : 'Что-то пошло не так. Попробуйте ещё раз или обратитесь в поддержку.'}</p>
     <a href="https://t.me/${botUsername}?start=payment_${success ? 'success' : 'fail'}" class="btn">
       🤖 Вернуться в бота
@@ -159,7 +149,7 @@ export function createWebhookServer(
 
   // Редирект для fail URL
   app.get('/payment/fail', (req: Request, res: Response) => {
-    res.redirect('/payment/success?Success=False');
+    res.redirect('/payment/success');
   });
 
   // Catch-all для ВСЕХ остальных маршрутов — логируем что именно запрашивается
@@ -174,7 +164,6 @@ export function createWebhookServer(
       availableRoutes: [
         'GET /',
         'GET /health',
-        'POST /webhook/cloudpayments',
         'GET /payment/success',
         'GET /payment/fail'
       ],

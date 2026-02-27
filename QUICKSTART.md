@@ -19,7 +19,12 @@ npm install
 
 ```env
 BOT_TOKEN=ваш_токен_от_BotFather
-PAYMENT_URL=https://ваша-платежная-система.com/payment
+BOT_USERNAME=your_bot_username
+
+PUBLIC_BASE_URL=https://your-domain.com
+
+TBANK_TERMINAL_KEY=ваш_terminal_key
+TBANK_PASSWORD=ваш_password
 ```
 
 ## Шаг 4: Настройка планов подписки
@@ -50,12 +55,9 @@ npm start
 
 ## Интеграция платежной системы
 
-1. Откройте `src/services/paymentService.ts`
-2. Реализуйте метод `createPaymentLink` для вашей платежной системы
-3. Реализуйте метод `verifyPayment` для проверки платежей
-4. (Опционально) Настройте webhook для автоматической активации подписок
+Интеграция уже настроена под T‑Bank (WebView / `PaymentURL` + проверка через `GetState`).
 
-Подробные примеры интеграции с разными платежными системами смотрите в `examples/payment-integration-example.md`.
+Инструкция по настройке: `TBANK_SETUP.md`.
 
 ## Следующие шаги
 

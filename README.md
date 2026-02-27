@@ -5,7 +5,7 @@ Telegram-бот на TypeScript для продажи подписок с инт
 ## Возможности
 
 - 📋 Просмотр доступных планов подписки
-- 💳 Покупка подписки через платежную систему
+- 💳 Покупка подписки через T‑Bank (интернет‑эквайринг, сценарий WebView / `PaymentURL`)
 - ✅ Проверка статуса подписки
 - 🔄 Автоматическая активация подписки после оплаты
 - 💬 Удобный интерфейс с inline-кнопками
@@ -25,15 +25,15 @@ Telegram-бот на TypeScript для продажи подписок с инт
 npm install
 ```
 
-3. Создайте файл `.env` на основе `.env.example`:
-```bash
-cp .env.example .env
-```
-
-4. Заполните переменные окружения в `.env`:
+3. Создайте файл `.env` в корне проекта и заполните переменные окружения:
 ```env
 BOT_TOKEN=your_bot_token_here
-PAYMENT_URL=https://your-payment-system.com/payment
+BOT_USERNAME=your_bot_username
+
+PUBLIC_BASE_URL=https://your-domain.com
+
+TBANK_TERMINAL_KEY=your_terminal_key
+TBANK_PASSWORD=your_terminal_password
 ```
 
 ## Настройка
@@ -45,21 +45,9 @@ PAYMENT_URL=https://your-payment-system.com/payment
 3. Следуйте инструкциям для создания бота
 4. Скопируйте полученный токен в файл `.env`
 
-### Настройка платежной системы
+### Настройка платежной системы (T‑Bank)
 
-В файле `src/services/paymentService.ts` настройте интеграцию с вашей платежной системой:
-
-- **Stripe**: Используйте Stripe Checkout или Payment Links
-- **ЮKassa**: Используйте API ЮKassa для создания платежей
-- **Другие системы**: Адаптируйте метод `createPaymentLink` под ваш API
-
-Пример для Stripe:
-```typescript
-createPaymentLink(userId: number, plan: SubscriptionPlan, chatId: number): string {
-  // Формируем Stripe Checkout Session
-  return `https://checkout.stripe.com/pay/${sessionId}`;
-}
-```
+Инструкция по настройке переменных и возвратов: `TBANK_SETUP.md`.
 
 ### Настройка планов подписки
 
@@ -107,47 +95,9 @@ npm start
 4. Отправить `/my_subscription` - проверить статус подписки
 5. Отправить `/help` - получить справку
 
-## Интеграция с платежной системой
+## Проверка оплаты
 
-### Webhook для обработки платежей
-
-Для автоматической активации подписки после оплаты настройте webhook от вашей платежной системы.
-
-Пример обработки webhook (добавьте в `src/index.ts`):
-
-```typescript
-import express from 'express';
-
-const app = express();
-app.use(express.json());
-
-app.post('/webhook/payment', async (req, res) => {
-  const paymentService = new PaymentService();
-  const subscriptionService = new SubscriptionService();
-  
-  const result = await paymentService.processPaymentNotification(req.body);
-  
-  if (result.success && result.userId && result.planId) {
-    subscriptionService.activateSubscription(
-      result.userId,
-      result.planId,
-      result.paymentId
-    );
-    
-    // Уведомить пользователя
-    await bot.telegram.sendMessage(
-      result.userId,
-      '✅ Ваша подписка успешно активирована!'
-    );
-  }
-  
-  res.status(200).send('OK');
-});
-```
-
-### Ручная проверка платежа
-
-Пользователь может нажать кнопку "Я оплатил" после перехода по ссылке на оплату. Бот проверит статус платежа и активирует подписку.
+Бот показывает кнопку **«✅ Проверить оплату»**. Проверка делается через метод T‑Bank **GetState**, как рекомендуется в статье.
 
 ## Структура проекта
 

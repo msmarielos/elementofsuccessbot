@@ -9,12 +9,14 @@ export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   botUsername: process.env.BOT_USERNAME || '',
   
-  // CloudPayments настройки
-  cloudPayments: {
-    publicId: process.env.CLOUDPAYMENTS_PUBLIC_ID || '',
-    apiSecret: process.env.CLOUDPAYMENTS_API_SECRET || '',
-    returnUrl: process.env.CLOUDPAYMENTS_RETURN_URL || '',
-    webhookUrl: process.env.CLOUDPAYMENTS_WEBHOOK_URL || '',
+  // T‑Bank e-acquiring настройки
+  tbank: {
+    terminalKey: process.env.TBANK_TERMINAL_KEY || '',
+    password: process.env.TBANK_PASSWORD || '',
+    apiBaseUrl: process.env.TBANK_API_BASE_URL || 'https://securepay.tinkoff.ru/v2',
+    publicBaseUrl: process.env.PUBLIC_BASE_URL || '',
+    successUrl: process.env.TBANK_SUCCESS_URL || '',
+    failUrl: process.env.TBANK_FAIL_URL || '',
   },
   
   // Закрытый канал
