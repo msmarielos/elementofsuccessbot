@@ -34,6 +34,15 @@ export type VerifiedPaymentState = {
   amountKopeks?: number;
 };
 
+function decodeEnvValue(value: string): string {
+  // Amvera UI may force special characters to be URL-encoded.
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 export class PaymentService {
   private terminalKey: string;
   private password: string;
@@ -45,7 +54,7 @@ export class PaymentService {
 
   constructor() {
     this.terminalKey = process.env.TBANK_TERMINAL_KEY || '';
-    this.password = process.env.TBANK_PASSWORD || '';
+    this.password = decodeEnvValue(process.env.TBANK_PASSWORD || '');
     this.apiBaseUrl = (process.env.TBANK_API_BASE_URL || 'https://securepay.tinkoff.ru/v2').replace(/\/+$/, '');
     this.isProduction = process.env.NODE_ENV === 'production';
     this.db = new PaymentDatabase();
