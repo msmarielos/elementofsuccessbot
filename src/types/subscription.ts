@@ -23,7 +23,7 @@ export interface UserSubscription {
   expiredProcessed?: boolean;
 }
 
-export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
+const BASE_SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
     id: '1_month',
     name: '1 месяц',
@@ -69,5 +69,24 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     ]
   }
 ];
+
+const TEST_SUBSCRIPTION_PLAN: SubscriptionPlan = {
+  id: 'test_1day',
+  name: 'Тест 1 день',
+  description: 'Тестовая подписка для быстрой проверки оплаты',
+  price: 10,
+  currency: 'RUB',
+  duration: 1,
+  features: [
+    'Тестовая активация подписки',
+    'Проверка полного платежного сценария'
+  ]
+};
+
+const shouldEnableTestPlan = process.env.ENABLE_TEST_PLAN === 'true' || process.env.NODE_ENV !== 'production';
+
+export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = shouldEnableTestPlan
+  ? [...BASE_SUBSCRIPTION_PLANS, TEST_SUBSCRIPTION_PLAN]
+  : BASE_SUBSCRIPTION_PLANS;
 
 
