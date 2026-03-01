@@ -70,19 +70,6 @@ const BASE_SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   }
 ];
 
-const TEST_SUBSCRIPTION_PLAN: SubscriptionPlan = {
-  id: 'test_1day',
-  name: 'Тест',
-  description: 'Тестовая подписка для быстрой проверки оплаты',
-  price: 10,
-  currency: 'RUB',
-  duration: 1,
-  features: [
-    'Тестовая активация подписки',
-    'Проверка полного платежного сценария'
-  ]
-};
-
-export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [...BASE_SUBSCRIPTION_PLANS, TEST_SUBSCRIPTION_PLAN];
+export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = BASE_SUBSCRIPTION_PLANS;
 
 
