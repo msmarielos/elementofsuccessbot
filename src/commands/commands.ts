@@ -27,8 +27,11 @@ export class BotCommands {
       const startPayload = message?.text?.split(' ')[1] || '';
 
       // Обработка возврата после оплаты
-      if (startPayload === 'payment_success') {
-        await this.handlePaymentReturn(ctx, true);
+      if (startPayload === 'payment_success' || startPayload.startsWith('payment_success_')) {
+        const paymentId = startPayload.startsWith('payment_success_')
+          ? startPayload.replace('payment_success_', '')
+          : undefined;
+        await this.handlePaymentReturn(ctx, true, paymentId);
         return;
       }
       if (startPayload === 'payment_fail') {
@@ -133,7 +136,7 @@ export class BotCommands {
   }
 
   // Обработка возврата после оплаты
-  private async handlePaymentReturn(ctx: Context, success: boolean) {
+  private async handlePaymentReturn(ctx: Context, success: boolean, paymentId?: string) {
     const userId = ctx.from?.id;
     if (!userId) return;
 
@@ -153,7 +156,8 @@ export class BotCommands {
         await ctx.reply(
           `✅ Оплата получена!\n\n` +
           `Ваша подписка активируется в течение нескольких минут.\n` +
-          `Если через 5 минут подписка не появится, напишите в поддержку.`
+          `Если через 5 минут подписка не появится, напишите в поддержку.` +
+          (paymentId ? `\n\nID платежа: ${paymentId}` : '')
         );
       }
     } else {

@@ -62,12 +62,16 @@ export class PaymentService {
     // URLs возврата после оплаты (SuccessURL/FailURL по статье)
     const publicBaseUrl = (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
     this.successUrl = process.env.TBANK_SUCCESS_URL || (publicBaseUrl ? `${publicBaseUrl}/payment/success` : '');
-    this.failUrl = process.env.TBANK_FAIL_URL || (publicBaseUrl ? `${publicBaseUrl}/payment/fail` : '');
+    // Явно отключаем FailURL: при неуспешной оплате пользователь остается в платежной форме и может повторить попытку.
+    this.failUrl = '';
 
     if (!this.terminalKey) console.warn('⚠️ TBANK_TERMINAL_KEY не установлен в переменных окружения');
     if (!this.password) console.warn('⚠️ TBANK_PASSWORD не установлен в переменных окружения');
-    if (!this.successUrl || !this.failUrl) {
-      console.warn('⚠️ Не заданы URLs возврата. Укажите PUBLIC_BASE_URL или TBANK_SUCCESS_URL/TBANK_FAIL_URL');
+    if (!this.successUrl) {
+      console.warn('⚠️ Не задан SuccessURL возврата. Укажите PUBLIC_BASE_URL или TBANK_SUCCESS_URL');
+    }
+    if (process.env.TBANK_FAIL_URL) {
+      console.warn('⚠️ TBANK_FAIL_URL задан, но игнорируется (FailURL отключен по бизнес-логике).');
     }
 
     console.log(`🗄️ Payments DB path: ${this.db.getFilePath()}`);
@@ -85,8 +89,8 @@ export class PaymentService {
     if (!this.terminalKey || !this.password) {
       throw new Error('TBANK_TERMINAL_KEY/TBANK_PASSWORD должны быть установлены');
     }
-    if (!this.successUrl || !this.failUrl) {
-      throw new Error('PUBLIC_BASE_URL или TBANK_SUCCESS_URL/TBANK_FAIL_URL должны быть установлены');
+    if (!this.successUrl) {
+      throw new Error('PUBLIC_BASE_URL или TBANK_SUCCESS_URL должны быть установлены');
     }
 
     const orderId = `${userId}_${plan.id}_${Date.now()}`;
@@ -98,7 +102,6 @@ export class PaymentService {
       OrderId: orderId,
       Description: `Подписка "${plan.name}" - Элемент успеха`,
       SuccessURL: this.successUrl,
-      FailURL: this.failUrl,
     };
 
     const token = this.createToken({ ...body, Password: this.password });

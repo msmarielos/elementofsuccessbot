@@ -44,9 +44,17 @@ INVITE_LINK_EXPIRE_HOURS=12
 
 В `Init` передаются:
 - `SuccessURL = ${PUBLIC_BASE_URL}/payment/success`
-- `FailURL = ${PUBLIC_BASE_URL}/payment/fail`
+- `FailURL` не передается (чтобы при неуспехе оставаться в платежном сценарии и повторить оплату)
 
-После оплаты пользователь попадает на страницу возврата, а сервер делает проверку через `GetState` (как в статье).
+После успешной оплаты пользователь попадает на `SuccessURL`, а сервер делает проверку через `GetState` (как в статье) и редиректит в Telegram-бота.
+
+Пример успешного возврата:
+
+```text
+https://t.me/your_bot_username?start=payment_success_123456789
+```
+
+Где `123456789` — это `PaymentId` от T-Bank.
 
 ## Тестовые платежи
 
