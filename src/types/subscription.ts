@@ -83,10 +83,6 @@ const TEST_SUBSCRIPTION_PLAN: SubscriptionPlan = {
   ]
 };
 
-const shouldEnableTestPlan = process.env.ENABLE_TEST_PLAN === 'true' || process.env.NODE_ENV !== 'production';
-
-export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = shouldEnableTestPlan
-  ? [...BASE_SUBSCRIPTION_PLANS, TEST_SUBSCRIPTION_PLAN]
-  : BASE_SUBSCRIPTION_PLANS;
+export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [...BASE_SUBSCRIPTION_PLANS, TEST_SUBSCRIPTION_PLAN];
 
 
