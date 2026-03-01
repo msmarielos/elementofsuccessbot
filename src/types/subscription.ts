@@ -72,7 +72,7 @@ const BASE_SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
 
 const TEST_SUBSCRIPTION_PLAN: SubscriptionPlan = {
   id: 'test_1day',
-  name: 'Тест 1 день',
+  name: 'Тест',
   description: 'Тестовая подписка для быстрой проверки оплаты',
   price: 10,
   currency: 'RUB',
