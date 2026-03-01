@@ -36,7 +36,27 @@ export class PaymentCompletionService {
       return { success: true, message: 'Подписка уже активирована (идемпотентно)' };
     }
 
-    const state = await this.paymentService.verifyPaymentByRecord(record);
+    let state = await this.paymentService.verifyPaymentByRecord(record);
+
+    // Двухстадийный режим: после AUTHORIZED подтверждаем списание через Confirm.
+    if (!state.isPaid && state.status === 'AUTHORIZED') {
+      try {
+        const confirm = await this.paymentService.confirmPayment(record.paymentId, record.amountKopeks);
+        if (!confirm?.Success) {
+          return {
+            success: false,
+            state,
+            message: `Не удалось подтвердить платеж (Confirm): ${confirm?.Message || confirm?.Details || confirm?.ErrorCode || 'unknown error'}`,
+          };
+        }
+      } catch (error) {
+        console.error('❌ Ошибка Confirm T‑Bank:', error);
+        return { success: false, state, message: 'Ошибка подтверждения двухстадийного платежа (Confirm)' };
+      }
+
+      // Повторно проверяем состояние после Confirm.
+      state = await this.paymentService.verifyPaymentByRecord(record);
+    }
 
     if (!state.isPaid) {
       return { success: false, state, message: `Платеж не подтвержден (status=${state.status || 'unknown'})` };
