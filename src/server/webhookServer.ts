@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import { Telegraf } from 'telegraf';
+import { InlineKeyboardMarkup } from 'telegraf/types';
 import { PaymentService } from '../services/paymentService';
 import { SubscriptionService } from '../services/subscriptionService';
 import { PaymentCompletionService } from '../services/paymentCompletionService';
@@ -90,6 +91,93 @@ export function createWebhookServer(
     res.redirect(`https://t.me/${botUsername}?start=${startParam}`);
   });
 
+  // Webhook уведомления от T‑Bank.
+  app.post('/payment/webhook', async (req: Request, res: Response) => {
+    const body = (req.body || {}) as Record<string, any>;
+
+    // Для T‑Bank важен буквальный ответ 200:OK, иначе уведомление считается непринятым.
+    const ack = () => res.status(200).send('OK');
+
+    if (!paymentService.isValidWebhookToken(body)) {
+      console.warn('⚠️ Получено webhook-уведомление с невалидным Token');
+      return ack();
+    }
+
+    const paymentIdRaw =
+      body.PaymentId ||
+      body.paymentId ||
+      body.PAYMENTID ||
+      body.paymentid;
+    const paymentId = paymentIdRaw ? String(paymentIdRaw) : '';
+    if (!paymentId) {
+      console.warn('⚠️ Webhook без PaymentId, пропускаю');
+      return ack();
+    }
+
+    const status = String(body.Status || '').toUpperCase();
+    console.log(`🔔 T‑Bank webhook: PaymentId=${paymentId}, Status=${status || 'UNKNOWN'}`);
+
+    try {
+      if (status === 'CONFIRMED' || status === 'AUTHORIZED') {
+        const result = await completionService.completeIfPaid(paymentId);
+        console.log(
+          `✅ Webhook success обработан: PaymentId=${paymentId}, Status=${status}, Activated=${result.success}, Message=${result.message || 'n/a'}`
+        );
+        return ack();
+      }
+
+      if (status === 'REJECTED' || status === 'CANCELED' || status === 'DEADLINE_EXPIRED') {
+        paymentService.markPaymentFailed(paymentId);
+        console.log(`❌ Webhook fail статус: PaymentId=${paymentId}, Status=${status} (marked failed)`);
+
+        const record = paymentService.getPaymentRecord(paymentId);
+        if (!record) {
+          console.warn(`⚠️ Webhook fail: запись платежа не найдена для PaymentId=${paymentId}`);
+          return ack();
+        }
+
+        const plan = subscriptionService.getPlanById(record.planId);
+        if (!plan) {
+          await bot.telegram.sendMessage(
+            record.userId,
+            `❌ Оплата не прошла (статус: ${status}).\n\nПопробуйте снова из меню подписок.`
+          );
+          return ack();
+        }
+
+        const { paymentUrl, paymentId: newPaymentId } = await paymentService.createPaymentLink(
+          record.userId,
+          plan,
+          record.chatId
+        );
+        console.log(
+          `🔁 Создана новая ссылка после fail: OldPaymentId=${paymentId}, NewPaymentId=${newPaymentId}, UserId=${record.userId}`
+        );
+
+        const keyboard: InlineKeyboardMarkup = {
+          inline_keyboard: [
+            [{ text: '💳 Оплатить снова', url: paymentUrl }],
+            [{ text: '✅ Проверить оплату', callback_data: `check_payment_${plan.id}_${newPaymentId}` }],
+          ],
+        };
+
+        await bot.telegram.sendMessage(
+          record.userId,
+          `❌ Оплата не прошла (статус: ${status}).\n\nМы уже создали новую ссылку, можно попробовать еще раз:`,
+          { reply_markup: keyboard }
+        );
+        console.log(`📨 Пользователь уведомлен о неуспешной оплате: UserId=${record.userId}, PaymentId=${paymentId}`);
+        return ack();
+      }
+
+      console.log(`ℹ️ Webhook статус без явной обработки: PaymentId=${paymentId}, Status=${status}`);
+    } catch (error) {
+      console.error('❌ Ошибка обработки payment webhook:', error);
+    }
+
+    return ack();
+  });
+
   // Fail URL не редиректит в success и не уводит пользователя в бота автоматически.
   app.get('/payment/fail', (req: Request, res: Response) => {
     res.status(200).send('Оплата не завершена. Вернитесь в платежную форму и попробуйте снова.');
@@ -107,6 +195,7 @@ export function createWebhookServer(
       availableRoutes: [
         'GET /',
         'GET /health',
+        'POST /payment/webhook',
         'GET /payment/success',
         'GET /payment/fail'
       ],

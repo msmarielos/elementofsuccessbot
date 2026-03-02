@@ -49,6 +49,7 @@ export class PaymentService {
   private apiBaseUrl: string;
   private successUrl: string;
   private failUrl: string;
+  private notificationUrl: string;
   private isProduction: boolean;
   private db: PaymentDatabase;
 
@@ -64,11 +65,15 @@ export class PaymentService {
     this.successUrl = process.env.TBANK_SUCCESS_URL || (publicBaseUrl ? `${publicBaseUrl}/payment/success` : '');
     // Явно отключаем FailURL: при неуспешной оплате пользователь остается в платежной форме и может повторить попытку.
     this.failUrl = '';
+    this.notificationUrl = process.env.TBANK_NOTIFICATION_URL || (publicBaseUrl ? `${publicBaseUrl}/payment/webhook` : '');
 
     if (!this.terminalKey) console.warn('⚠️ TBANK_TERMINAL_KEY не установлен в переменных окружения');
     if (!this.password) console.warn('⚠️ TBANK_PASSWORD не установлен в переменных окружения');
     if (!this.successUrl) {
       console.warn('⚠️ Не задан SuccessURL возврата. Укажите PUBLIC_BASE_URL или TBANK_SUCCESS_URL');
+    }
+    if (!this.notificationUrl) {
+      console.warn('⚠️ Не задан NotificationURL. Укажите PUBLIC_BASE_URL или TBANK_NOTIFICATION_URL для webhook-уведомлений');
     }
     if (process.env.TBANK_FAIL_URL) {
       console.warn('⚠️ TBANK_FAIL_URL задан, но игнорируется (FailURL отключен по бизнес-логике).');
@@ -103,6 +108,9 @@ export class PaymentService {
       Description: `Подписка "${plan.name}" - Элемент успеха`,
       SuccessURL: this.successUrl,
     };
+    if (this.notificationUrl) {
+      body.NotificationURL = this.notificationUrl;
+    }
 
     const token = this.createToken({ ...body, Password: this.password });
     const requestBody = { ...body, Token: token };
@@ -156,6 +164,10 @@ export class PaymentService {
     this.db.markActivated(paymentId);
   }
 
+  markPaymentFailed(paymentId: string): void {
+    this.db.updateStatus(paymentId, 'failed');
+  }
+
   /**
    * Получить статус платежа (GetState).
    * По статье: после успешного/неуспешного сценария нужно дополнительно вызвать метод получения статуса.
@@ -206,6 +218,29 @@ export class PaymentService {
       console.error('❌ Ошибка verifyPaymentByRecord:', error);
       return { isPaid: false };
     }
+  }
+
+  /**
+   * Проверка токена входящего webhook-уведомления от T‑Bank.
+   * Невалидный токен означает, что уведомление нельзя считать доверенным.
+   */
+  isValidWebhookToken(payload: Record<string, any>): boolean {
+    const tokenFromPayload = payload?.Token;
+    if (!tokenFromPayload || typeof tokenFromPayload !== 'string') {
+      return false;
+    }
+
+    const fieldsForToken: Record<string, any> = {};
+    Object.keys(payload).forEach((key) => {
+      if (key === 'Token') return;
+      const value = payload[key];
+      if (value === undefined || value === null) return;
+      if (typeof value === 'object') return;
+      fieldsForToken[key] = value;
+    });
+
+    const expected = this.createToken({ ...fieldsForToken, Password: this.password });
+    return expected === tokenFromPayload;
   }
 
   /**
