@@ -28,18 +28,6 @@ type TBankGetStateResponse = {
   Amount?: number;
 };
 
-type TBankConfirmResponse = {
-  Success: boolean;
-  ErrorCode?: string;
-  Message?: string;
-  Details?: string;
-  TerminalKey?: string;
-  Status?: string;
-  PaymentId?: string | number;
-  OrderId?: string;
-  Amount?: number;
-};
-
 export type VerifiedPaymentState = {
   isPaid: boolean;
   status?: string;
@@ -192,31 +180,6 @@ export class PaymentService {
     return response.data;
   }
 
-  /**
-   * Подтверждение двухстадийного платежа (Confirm).
-   * Для подписок подтверждаем на полную сумму заказа.
-   */
-  async confirmPayment(paymentId: string, amountKopeks: number): Promise<TBankConfirmResponse> {
-    if (!this.terminalKey || !this.password) {
-      throw new Error('TBANK_TERMINAL_KEY/TBANK_PASSWORD должны быть установлены');
-    }
-
-    const body: Record<string, any> = {
-      TerminalKey: this.terminalKey,
-      PaymentId: paymentId,
-      Amount: amountKopeks,
-    };
-    const token = this.createToken({ ...body, Password: this.password });
-    const requestBody = { ...body, Token: token };
-
-    const response = await axios.post<TBankConfirmResponse>(`${this.apiBaseUrl}/Confirm`, requestBody, {
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 15000,
-    });
-
-    return response.data;
-  }
-
   async verifyPaymentByRecord(record: StoredPayment): Promise<VerifiedPaymentState> {
     try {
       const state = await this.getPaymentState(record.paymentId);
@@ -228,9 +191,9 @@ export class PaymentService {
       const status = state.Status || '';
       const amount = typeof state.Amount === 'number' ? state.Amount : undefined;
 
-      // Подписку активируем только после фактического списания (CONFIRMED).
-      // В двухстадийном сценарии AUTHORIZED означает, что нужен отдельный Confirm.
-      const paidByStatus = status === 'CONFIRMED';
+      // Одностадийный: CONFIRMED
+      // Двухстадийный: AUTHORIZED (после оплаты) → CONFIRMED (после Confirm)
+      const paidByStatus = status === 'CONFIRMED' || status === 'AUTHORIZED';
       const amountMatches = amount === undefined ? true : amount === record.amountKopeks;
 
       if (paidByStatus && amountMatches) {

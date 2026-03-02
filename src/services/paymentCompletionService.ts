@@ -36,28 +36,7 @@ export class PaymentCompletionService {
       return { success: true, message: 'Подписка уже активирована (идемпотентно)' };
     }
 
-    let state = await this.paymentService.verifyPaymentByRecord(record);
-
-    // Двухстадийный режим: после AUTHORIZED подтверждаем списание через Confirm.
-    if (!state.isPaid && state.status === 'AUTHORIZED') {
-      try {
-        const confirm = await this.paymentService.confirmPayment(record.paymentId, record.amountKopeks);
-        if (!confirm?.Success) {
-          return {
-            success: false,
-            state,
-            message: `Не удалось подтвердить платеж (Confirm): ${confirm?.Message || confirm?.Details || confirm?.ErrorCode || 'unknown error'}`,
-          };
-        }
-      } catch (error) {
-        console.error('❌ Ошибка Confirm T‑Bank:', error);
-        return { success: false, state, message: 'Ошибка подтверждения двухстадийного платежа (Confirm)' };
-      }
-
-      // Повторно проверяем состояние после Confirm.
-      state = await this.paymentService.verifyPaymentByRecord(record);
-    }
-
+    const state = await this.paymentService.verifyPaymentByRecord(record);
     if (!state.isPaid) {
       return { success: false, state, message: `Платеж не подтвержден (status=${state.status || 'unknown'})` };
     }
@@ -68,7 +47,6 @@ export class PaymentCompletionService {
 
     const plan = this.subscriptionService.getPlanById(record.planId);
     const endDate = subscription.endDate.toLocaleDateString('ru-RU');
-
     const inviteLink = await this.createInviteLink(record.userId);
 
     let message =
@@ -84,8 +62,7 @@ export class PaymentCompletionService {
         `Перейдите по ней прямо сейчас.\n\n`;
     }
 
-    message += `Спасибо за покупку! 🎉`;
-
+    message += 'Спасибо за покупку! 🎉';
     await this.bot.telegram.sendMessage(record.userId, message);
 
     return { success: true, state, message: 'Подписка активирована' };
@@ -121,7 +98,7 @@ export class PaymentCompletionService {
       chatId,
       `⏳ Платеж пока не подтвержден.\n\n` +
         `Статус: ${state.status || 'неизвестно'}\n` +
-        `Если вы уже оплатили — подождите 1–2 минуты и нажмите “Проверить еще раз”.`,
+        'Если вы уже оплатили — подождите 1–2 минуты и нажмите “Проверить еще раз”.',
       { reply_markup: keyboard }
     );
   }
