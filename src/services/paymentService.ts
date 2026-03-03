@@ -50,6 +50,12 @@ export class PaymentService {
   private successUrl: string;
   private failUrl: string;
   private notificationUrl: string;
+  private receiptEmail: string;
+  private receiptPhone: string;
+  private receiptTaxation: string;
+  private receiptTax: string;
+  private receiptPaymentMethod: string;
+  private receiptPaymentObject: string;
   private isProduction: boolean;
   private db: PaymentDatabase;
 
@@ -66,6 +72,12 @@ export class PaymentService {
     // Явно отключаем FailURL: при неуспешной оплате пользователь остается в платежной форме и может повторить попытку.
     this.failUrl = '';
     this.notificationUrl = process.env.TBANK_NOTIFICATION_URL || (publicBaseUrl ? `${publicBaseUrl}/payment/webhook` : '');
+    this.receiptEmail = process.env.TBANK_RECEIPT_EMAIL || '';
+    this.receiptPhone = process.env.TBANK_RECEIPT_PHONE || '';
+    this.receiptTaxation = process.env.TBANK_RECEIPT_TAXATION || '';
+    this.receiptTax = process.env.TBANK_RECEIPT_TAX || 'none';
+    this.receiptPaymentMethod = process.env.TBANK_RECEIPT_PAYMENT_METHOD || 'full_payment';
+    this.receiptPaymentObject = process.env.TBANK_RECEIPT_PAYMENT_OBJECT || 'service';
 
     if (!this.terminalKey) console.warn('⚠️ TBANK_TERMINAL_KEY не установлен в переменных окружения');
     if (!this.password) console.warn('⚠️ TBANK_PASSWORD не установлен в переменных окружения');
@@ -74,6 +86,9 @@ export class PaymentService {
     }
     if (!this.notificationUrl) {
       console.warn('⚠️ Не задан NotificationURL. Укажите PUBLIC_BASE_URL или TBANK_NOTIFICATION_URL для webhook-уведомлений');
+    }
+    if (!this.receiptEmail && !this.receiptPhone) {
+      console.warn('⚠️ Не задан TBANK_RECEIPT_EMAIL или TBANK_RECEIPT_PHONE. Receipt не будет отправляться в Init.');
     }
     if (process.env.TBANK_FAIL_URL) {
       console.warn('⚠️ TBANK_FAIL_URL задан, но игнорируется (FailURL отключен по бизнес-логике).');
@@ -110,6 +125,10 @@ export class PaymentService {
     };
     if (this.notificationUrl) {
       body.NotificationURL = this.notificationUrl;
+    }
+    const receipt = this.buildReceipt(plan, amountKopeks);
+    if (receipt) {
+      body.Receipt = receipt;
     }
 
     const token = this.createToken({ ...body, Password: this.password });
@@ -241,6 +260,46 @@ export class PaymentService {
 
     const expected = this.createToken({ ...fieldsForToken, Password: this.password });
     return expected === tokenFromPayload;
+  }
+
+  private buildReceipt(plan: SubscriptionPlan, amountKopeks: number): Record<string, any> | null {
+    const email = this.receiptEmail.trim();
+    const phone = this.receiptPhone.trim();
+    if (!email && !phone) {
+      return null;
+    }
+
+    const itemName = `Подписка ${plan.name}`.slice(0, 128);
+    const receipt: Record<string, any> = {
+      Items: [
+        {
+          Name: itemName,
+          Price: amountKopeks,
+          Quantity: 1,
+          Amount: amountKopeks,
+          Tax: this.receiptTax,
+          PaymentMethod: this.receiptPaymentMethod,
+          PaymentObject: this.receiptPaymentObject,
+        },
+      ],
+      Payments: [
+        {
+          Electronic: amountKopeks,
+        },
+      ],
+    };
+
+    if (this.receiptTaxation) {
+      receipt.Taxation = this.receiptTaxation;
+    }
+    if (email) {
+      receipt.Email = email;
+    }
+    if (phone) {
+      receipt.Phone = phone;
+    }
+
+    return receipt;
   }
 
   /**
