@@ -104,6 +104,13 @@ export class PaymentService {
       console.warn('⚠️ TBANK_FAIL_URL задан, но игнорируется (FailURL отключен по бизнес-логике).');
     }
 
+    const maskedTerminal = this.terminalKey
+      ? `${this.terminalKey.slice(0, 4)}***${this.terminalKey.slice(-4)}`
+      : '(empty)';
+    console.log(
+      `🔐 T‑Bank auth loaded: terminal=${maskedTerminal}, passwordLength=${this.password.length}, apiBase=${this.apiBaseUrl}`
+    );
+
     console.log(`🗄️ Payments DB path: ${this.db.getFilePath()}`);
   }
 
