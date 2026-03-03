@@ -203,7 +203,7 @@ ${plan.features.map(f => `• ${f}`).join('\n')}
       return;
     }
 
-    await this.paymentCompletion.replyCheckResultToChat(ctx.chat!.id, paymentId);
+    await this.paymentCompletion.replyCheckResultToChat(ctx.chat!.id, paymentId, planId, userId);
   }
 
   private async handleStartCommand(ctx: Context) {

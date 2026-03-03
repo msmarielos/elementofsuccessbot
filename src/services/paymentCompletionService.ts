@@ -68,10 +68,43 @@ export class PaymentCompletionService {
     return { success: true, state, message: 'Подписка активирована' };
   }
 
-  async replyCheckResultToChat(chatId: number, paymentId: string): Promise<void> {
+  async replyCheckResultToChat(
+    chatId: number,
+    paymentId: string,
+    planId?: string,
+    userId?: number
+  ): Promise<void> {
     const record = this.paymentService.getPaymentRecord(paymentId);
     if (!record) {
-      await this.bot.telegram.sendMessage(chatId, '❌ Платеж не найден. Попробуйте создать новую ссылку на оплату.');
+      if (!planId || !userId) {
+        await this.bot.telegram.sendMessage(chatId, '❌ Платеж не найден. Попробуйте создать новую ссылку на оплату.');
+        return;
+      }
+
+      const plan = this.subscriptionService.getPlanById(planId);
+      if (!plan) {
+        await this.bot.telegram.sendMessage(chatId, '❌ Платеж не найден, и тариф тоже не найден. Выберите тариф заново.');
+        return;
+      }
+
+      try {
+        const { paymentUrl, paymentId: newPaymentId } = await this.paymentService.createPaymentLink(userId, plan, chatId);
+        const retryKeyboard: InlineKeyboardMarkup = {
+          inline_keyboard: [
+            [{ text: '💳 Оплатить еще раз', url: paymentUrl }],
+            [{ text: '✅ Проверить оплату', callback_data: `check_payment_${plan.id}_${newPaymentId}` }],
+          ],
+        };
+
+        await this.bot.telegram.sendMessage(
+          chatId,
+          '❌ Платеж не найден. Мы создали новую ссылку на оплату:',
+          { reply_markup: retryKeyboard }
+        );
+      } catch (error) {
+        console.error('❌ Ошибка создания новой ссылки при неизвестном PaymentId:', error);
+        await this.bot.telegram.sendMessage(chatId, '❌ Платеж не найден. Не удалось создать новую ссылку, попробуйте из меню подписок.');
+      }
       return;
     }
 
