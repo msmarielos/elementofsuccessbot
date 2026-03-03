@@ -83,6 +83,50 @@ export class PaymentCompletionService {
       return;
     }
 
+    const status = (state.status || '').toUpperCase();
+    const isFailedStatus = status === 'REJECTED' || status === 'CANCELED' || status === 'DEADLINE_EXPIRED';
+    if (isFailedStatus) {
+      this.paymentService.markPaymentFailed(paymentId);
+
+      const plan = this.subscriptionService.getPlanById(record.planId);
+      if (!plan) {
+        await this.bot.telegram.sendMessage(
+          chatId,
+          `❌ Оплата не прошла (статус: ${status}).\n\nСоздайте новую оплату из меню подписок.`
+        );
+        return;
+      }
+
+      try {
+        const { paymentUrl, paymentId: newPaymentId } = await this.paymentService.createPaymentLink(
+          record.userId,
+          plan,
+          record.chatId
+        );
+
+        const retryKeyboard: InlineKeyboardMarkup = {
+          inline_keyboard: [
+            [{ text: '💳 Оплатить снова', url: paymentUrl }],
+            [{ text: '✅ Проверить оплату', callback_data: `check_payment_${plan.id}_${newPaymentId}` }],
+          ],
+        };
+
+        await this.bot.telegram.sendMessage(
+          chatId,
+          `❌ Оплата не прошла (статус: ${status}).\n\nМы создали новую ссылку, попробуйте снова:`,
+          { reply_markup: retryKeyboard }
+        );
+        return;
+      } catch (error) {
+        console.error('❌ Ошибка создания новой ссылки после failed статуса:', error);
+        await this.bot.telegram.sendMessage(
+          chatId,
+          `❌ Оплата не прошла (статус: ${status}).\n\nНе удалось автоматически создать новую ссылку, попробуйте еще раз через меню подписок.`
+        );
+        return;
+      }
+    }
+
     const keyboard: InlineKeyboardMarkup = {
       inline_keyboard: [
         [
