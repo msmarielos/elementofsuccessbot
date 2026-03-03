@@ -282,11 +282,9 @@ export class PaymentService {
           PaymentObject: this.receiptPaymentObject,
         },
       ],
-      Payments: [
-        {
-          Electronic: amountKopeks,
-        },
-      ],
+      Payments: {
+        Electronic: amountKopeks,
+      },
     };
 
     if (this.receiptTaxation) {
