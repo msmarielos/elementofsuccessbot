@@ -71,7 +71,8 @@ export class PaymentService {
 
   constructor() {
     this.terminalKey = normalizeEnvValue(process.env.TBANK_TERMINAL_KEY || '');
-    this.password = normalizeEnvValue(process.env.TBANK_PASSWORD || '');
+    // Для отладки берем пароль ровно "как есть" из env, без trim/decode/снятия кавычек.
+    this.password = process.env.TBANK_PASSWORD || '';
     this.apiBaseUrl = (process.env.TBANK_API_BASE_URL || 'https://securepay.tinkoff.ru/v2').replace(/\/+$/, '');
     this.isProduction = process.env.NODE_ENV === 'production';
     this.db = new PaymentDatabase();
@@ -325,7 +326,9 @@ export class PaymentService {
     const normalized: Record<string, string> = {};
     Object.keys(fields).forEach((key) => {
       if (fields[key] === undefined || fields[key] === null) return;
-      // В Token-схеме T‑Bank обычно участвуют строковые значения. Объекты/массивы не используем.
+      // В Token-схеме T‑Bank участвуют только скалярные поля верхнего уровня.
+      // Объекты/массивы (например Receipt, DATA) не включаем в подпись.
+      if (typeof fields[key] === 'object') return;
       normalized[key] = String(fields[key]);
     });
 
